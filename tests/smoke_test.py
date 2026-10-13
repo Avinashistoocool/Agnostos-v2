@@ -277,6 +277,42 @@ def main() -> int:
         [Path(settings.resume_path).name]
     print(f"    ok: {written.name}")
 
+    print("[9d] transient SMTP drop reconnects; persistent failure aborts")
+    import smtplib as _smtplib
+
+    class _FlakyServer:
+        def __init__(self, fail_times):
+            self.fail_times = fail_times
+            self.delivered = 0
+
+        def send_message(self, _msg):
+            if self.fail_times > 0:
+                self.fail_times -= 1
+                raise _smtplib.SMTPServerDisconnected("connection reset")
+            self.delivered += 1
+
+    flaky = Mailer(settings, profile)
+    flaky.dry_run = False
+    server = _FlakyServer(fail_times=1)
+    flaky._server = server
+    flaky.connect = lambda: setattr(flaky, "_server", server)
+    assert flaky.send_one(rows3[0])["status"] == "sent", "transient drop was not retried"
+    assert server.delivered == 1
+
+    dead = Mailer(settings, profile)
+    dead.dry_run = False
+    dead_server = _FlakyServer(fail_times=999)
+    dead._server = dead_server
+    dead.connect = lambda: setattr(dead, "_server", dead_server)
+    dead.s = replace(settings, send_delay_min=0, send_delay_max=0)
+    aborts = []
+    dead_updates = dead.send_batch(
+        rows3, resend=True,
+        progress=lambda *a: aborts.append(a[3]["status"]))
+    assert "aborted" in aborts, aborts
+    assert len(dead_updates) < len(rows3), (len(dead_updates), len(rows3))
+    print(f"    ok: retried once, then stopped after {len(dead_updates)} failures")
+
     print("[10] scraper extraction heuristics")
     html = """<html><body>
       <div class="person"><h3>Prof. Dr. Anna Schmidt</h3>

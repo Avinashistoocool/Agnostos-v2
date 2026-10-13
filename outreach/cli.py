@@ -25,6 +25,30 @@ from .resume_parser import parse_resume, save_profile
 
 BAR = "=" * 62
 
+# Mapped from the exception name the mailer reports, so a failed run ends with
+# the fix rather than a bare traceback class.
+SMTP_HINTS = {
+    "SMTPSenderRefused":
+        "   The server refused your From address. SMTP_FROM usually has to be\n"
+        "   exactly the mailbox SMTP_USER authenticates as - check .env.",
+    "SMTPAuthenticationError":
+        "   Login rejected. For Gmail use a 16-char App Password, not your\n"
+        "   account password (https://myaccount.google.com/apppasswords).",
+    "SMTPServerDisconnected":
+        "   The server dropped the connection, usually rate-limiting. Raise\n"
+        "   SEND_DELAY_MIN/MAX, lower DAILY_SEND_CAP, and re-run to continue.",
+    "SMTPRecipientsRefused":
+        "   The recipient address was rejected - check that row in the sheet.",
+    "SMTPDataError":
+        "   The server rejected the message body, often as suspected spam.\n"
+        "   Shorten the draft or send fewer at a time.",
+    "SMTPConnectError":
+        "   Could not reach SMTP_HOST:SMTP_PORT. Check the host, port, and\n"
+        "   SMTP_SECURITY (starttls on 587, ssl on 465).",
+    "TimeoutError":
+        "   The mail server timed out. Raise SMTP_TIMEOUT in .env.",
+}
+
 
 def _h(title: str) -> None:
     print(f"\n{BAR}\n {title}\n{BAR}")
@@ -265,9 +289,14 @@ def cmd_send(args) -> int:
             return 2
 
     def progress(i, total, row, result):
+        if result["status"] == "aborted":
+            print(_safe(f"\n  ! Stopped: {result['detail']}"))
+            return
         print(_safe(f"  [{i}/{total}] {result['status']:<12} {row['email'][:40]:<40} "
                     f"({row['probability']}%)"))
-        if dry_run and i <= args.preview:
+        if result["status"].startswith("failed") and result.get("detail"):
+            print(_safe(f"       -> {result['detail'][:120]}"))
+        if dry_run and i <= args.preview and result.get("message") is not None:
             msg = result["message"]
             print("  " + "-" * 58)
             print(_safe(f"  Subject: {msg['Subject']}"))
@@ -287,7 +316,13 @@ def cmd_send(args) -> int:
           f"dry-run={sum(1 for u in updates if u['status'] == 'dry-run')} "
           f"failed={len(failed)} | statuses written back to {path.name}")
     if failed:
-        print(f" First failure: {_safe(failed[0]['status'])}")
+        first = failed[0]
+        print(_safe(f" First failure: {first['status']}"))
+        if first.get("detail"):
+            print(_safe(f"   {first['detail'][:200]}"))
+        print(SMTP_HINTS.get(first["status"].removeprefix("failed: "),
+                             "   Re-run the same command to retry the failed rows; "
+                             "successful sends are not repeated."))
     if dry_run:
         print("\n To actually see these in your mail app, either:")
         print("   python -m outreach.cli send --review    # mail copies to yourself")

@@ -281,6 +281,12 @@ Both suites run on a fresh clone with **no `.env` and no API key** — they fall
 
 Cold emails to professors work when they're specific and sparse. Read every draft before sending — the LLM is grounded on real OpenAlex publications, but you are the one signing it, and the `Review Flags` column exists because models do occasionally invent a credential. Keep `DAILY_SEND_CAP` modest, send from your university address, attach your CV, and use `--top 10` rather than mailing an entire faculty.
 
+### When sends start failing
+
+University relays throttle aggressively. If a message is refused or the socket drops, the mailer reconnects once and retries; after three consecutive failures it stops the run so the untouched rows stay sendable. Failed rows are never marked as sent, so re-running the same command retries exactly those rows and skips the successes.
+
+If you see `SMTPSenderRefused` or repeated `SMTPServerDisconnected`, the relay is almost certainly rate-limiting you. Raise `SEND_DELAY_MIN`/`SEND_DELAY_MAX` (300/600 is safe for a university server), lower `DAILY_SEND_CAP`, and send in small batches with `--top 5`. Also confirm `SMTP_FROM` is exactly the address `SMTP_USER` is allowed to send as — most relays refuse any mismatch.
+
 ---
 
 ## License

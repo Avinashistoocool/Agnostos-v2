@@ -22,6 +22,10 @@ SIGNATURE = """
 {institution}
 {email}{phone}"""
 
+# Mail servers that reject or drop this many messages in a row are throttling
+# or refusing the account; continuing just marks every remaining row failed.
+MAX_CONSECUTIVE_FAILURES = 3
+
 
 def build_signature(profile: ResumeProfile) -> str:
     return SIGNATURE.format(
@@ -112,6 +116,23 @@ class Mailer:
         return msg
 
     # ---------- sending ----------
+    def _deliver(self, msg: EmailMessage) -> None:
+        """Send one message, reconnecting once if the server dropped us.
+
+        University relays routinely close the socket after a few messages or
+        an idle gap. A dropped connection is transient, so rebuild it and try
+        again rather than failing every remaining row against a dead socket.
+        """
+        try:
+            if self._server is None:
+                self.connect()
+            self._server.send_message(msg)
+            return
+        except (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError, OSError):
+            self.close()
+            self.connect()
+            self._server.send_message(msg)
+
     def send_one(self, row: dict) -> dict:
         subject = row.get("subject") or "Summer research internship enquiry"
         to_email = row["email"]
@@ -124,7 +145,7 @@ class Mailer:
         if self.dry_run:
             return {"status": "dry-run", "detail": "not sent", "message": msg}
         try:
-            self._server.send_message(msg)
+            self._deliver(msg)
             self.sent_count += 1
             status = "review-sent" if self.redirect_to else "sent"
             return {"status": status, "detail": "", "message": msg}
@@ -157,6 +178,7 @@ class Mailer:
         if top:
             # Mail the N strongest matches, not the first N in sheet order.
             pending = sorted(pending, key=lambda r: -r.get("probability", 0))[:top]
+        consecutive_failures = 0
         for i, row in enumerate(pending, 1):
             if self.sent_count >= self.s.daily_send_cap and not self.dry_run:
                 updates.append({**row, "status": "skipped: daily cap reached"})
@@ -165,12 +187,33 @@ class Mailer:
             update = {
                 "sheet": row["sheet"], "row": row["row"],
                 "status": result["status"],
+                "detail": result.get("detail", ""),
                 "sent_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 if result["status"] in {"sent", "review-sent", "dry-run"} else "",
             }
             updates.append(update)
             if progress:
                 progress(i, len(pending), row, result)
+
+            if result["status"].startswith("failed"):
+                # A mail server that rejects or drops several in a row is
+                # throttling or refusing the account. Hammering it burns the
+                # sender reputation and marks every remaining row failed.
+                consecutive_failures += 1
+                if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                    if progress:
+                        progress(i, len(pending), row, {
+                            "status": "aborted",
+                            "detail": f"{consecutive_failures} consecutive SMTP failures; "
+                                      "stopping so the rest stay sendable",
+                            "message": None,
+                        })
+                    break
+                if self.s.send_delay_max:
+                    time.sleep(min(30.0, 5.0 * consecutive_failures))
+                continue
+
+            consecutive_failures = 0
             if i < len(pending) and result["status"] in {"sent", "review-sent"}:
                 delay = random.uniform(self.s.send_delay_min, self.s.send_delay_max)
                 time.sleep(delay)
