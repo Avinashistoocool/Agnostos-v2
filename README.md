@@ -1,6 +1,5 @@
 # Agnostos
-
-Resume-driven professor matching, acceptance-probability scoring, personalised cold-email drafting, and throttled dispatch — built for **research-internship outreach**, and free to run end to end.
+An autonomous, token-efficient pipeline for research internship outreach. Agnostos matches your CV against prospective supervisors, retrieves their recent publications, predicts acceptance probability, drafts tailored cold emails without generic LLM prose, and throttles outbound SMTP delivery.
 
 ```
 resume.pdf ─┐
