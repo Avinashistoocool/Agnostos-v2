@@ -1,0 +1,10 @@
+﻿openpyxl>=3.1.0
+pdfplumber>=0.11.0
+python-docx>=1.1.0
+python-dotenv>=1.0.0
+openai>=1.50.0
+PyYAML>=6.0
+
+# Mode A (faculty-directory scraping) only. Install with:
+#   pip install playwright && python -m playwright install chromium
+# playwright>=1.45.0

@@ -1,0 +1,34 @@
+# Mode A discovery sources.
+# Each entry is a faculty/group directory page to scrape.
+# robots.txt is honoured unless you set RESPECT_ROBOTS=false in .env.
+#
+# TIP: prefer GROUP pages that carry research blurbs over bare staff tables.
+# Rows with no research text are rejected before the LLM, since a
+# "personalized" email written from "Research Associate, CMS, Room 511b"
+# is neither personal nor worth the tokens.
+
+sources:
+  - url: https://www.physik.uni-hamburg.de/en/iexp/gruppe-kasieczka.html
+    institution: University of Hamburg
+    country: Germany
+    department: Institute of Experimental Physics
+
+  - url: https://www.etp.kit.edu/english/staff.php
+    institution: Karlsruhe Institute of Technology
+    country: Germany
+    department: Institute of Experimental Particle Physics
+
+  - url: https://www.nikhef.nl/en/about-nikhef/people/
+    institution: Nikhef
+    country: Netherlands
+    department: Physics Data Processing
+
+  - url: https://www.epfl.ch/labs/lastro/people/
+    institution: EPFL
+    country: Switzerland
+    department: Laboratory of Astrophysics
+
+  - url: https://www.mlmi.eng.cam.ac.uk/people
+    institution: University of Cambridge
+    country: UK
+    department: Machine Learning Group

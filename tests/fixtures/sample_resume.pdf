@@ -1,0 +1,68 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 1538 >>
+stream
+BT
+/F1 10 Tf
+12 TL
+50 800 Td
+(Alex Doe) Tj T*
+(alex.doe@example.edu | +00-000-000-0000 | Example City) Tj T*
+() Tj T*
+(EDUCATION) Tj T*
+(B.Tech in Engineering Physics, Example Institute of Technology, expected 2029) Tj T*
+(CGPA: 8.9/10) Tj T*
+() Tj T*
+(RESEARCH INTERESTS) Tj T*
+(Machine learning for high-energy physics, jet tagging, graph neural networks,) Tj T*
+(anomaly detection, transformer architectures, generative models for simulation,) Tj T*
+(physics-informed neural networks, scientific computing.) Tj T*
+() Tj T*
+(PROJECTS) Tj T*
+(Gated Dual-Stream Particle Transformer) Tj T*
+(Built a modified Particle Transformer for jet classification, adding a gated) Tj T*
+(dual-stream attention path and multiplicative feature-space gating. Trained on a) Tj T*
+(small subset of the JetClass dataset, mostly to understand the architecture.) Tj T*
+() Tj T*
+(Graph Neural Networks for Calorimeter Clustering) Tj T*
+(Implemented a GNN that groups calorimeter hits into clusters, using PyTorch) Tj T*
+(Geometric. Spent most of the time on the edge-construction step.) Tj T*
+() Tj T*
+(Normalising Flows for Fast Detector Simulation) Tj T*
+(Tried a conditional normalising flow as a surrogate for a slow simulation step.) Tj T*
+(Still working out why the tails are mismodelled.) Tj T*
+() Tj T*
+(SKILLS) Tj T*
+(Python, PyTorch, NumPy, ROOT, C++, Git, Linux, PyTorch Geometric, scikit-learn,) Tj T*
+(pandas, Matplotlib, LaTeX, Slurm, Docker.) Tj T*
+() Tj T*
+(ACHIEVEMENTS) Tj T*
+(Department rank 3 of 120. Institute merit scholarship.) Tj T*
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000001831 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1901
+%%EOF

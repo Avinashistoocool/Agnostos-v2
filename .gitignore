@@ -1,0 +1,27 @@
+﻿# secrets
+.env
+.env.local
+
+# generated output
+output/
+tests/_tmp/
+*.backup-*.xlsx
+*.eml
+src_test.json
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# tooling / debug artefacts
+*.tgz
+copilot-debug-logs-*
+~/
+.vscode/
+.idea/
+.DS_Store

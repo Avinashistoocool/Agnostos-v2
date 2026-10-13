@@ -1,0 +1,40 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install reportlab
+
+      - name: Build test fixtures
+        run: python tests/make_fixtures.py
+
+      # No .env exists in CI, so both suites fall back to the fixtures and
+      # run entirely offline: the LLM is mocked and no mail is ever sent.
+      - name: Smoke test
+        run: python tests/smoke_test.py
+
+      - name: Provider integration test
+        run: python tests/openai_stub_test.py
