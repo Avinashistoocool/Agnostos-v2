@@ -1,6 +1,7 @@
 """Excel ingestion (Mode B) and result writing for both modes."""
 from __future__ import annotations
 
+import json
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -297,13 +298,73 @@ def load_for_sending(path: str | Path, sheet: str | None = None) -> list[dict]:
                 "probability": prob,
                 "send_status": str(get("Send Status") or "").strip(),
             })
+    _apply_pending(path, rows)
     return rows
 
 
-def mark_sent(path: str | Path, updates: list[dict]) -> None:
-    """Write Send Status / Sent At back to the workbook."""
+def _apply_pending(path: Path, rows: list[dict]) -> None:
+    """Overlay statuses parked while the workbook was locked."""
+    sidecar = sidecar_path(path)
+    if not sidecar.exists():
+        return
+    try:
+        pending = json.loads(sidecar.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    by_cell = {(p["sheet"], p["row"]): p for p in pending}
+    for row in rows:
+        hit = by_cell.get((row["sheet"], row["row"]))
+        if hit:
+            row["send_status"] = hit["status"]
+
+
+def sidecar_path(path: str | Path) -> Path:
+    """Where statuses are parked when the workbook cannot be written."""
     path = Path(path)
-    wb = load_workbook(path)
+    return path.with_suffix(path.suffix + ".pending-status.json")
+
+
+def is_writable(path: str | Path) -> bool:
+    """True if the workbook is not held open by Excel or another process."""
+    path = Path(path)
+    if not path.exists():
+        return False
+    try:
+        with open(path, "r+b"):
+            return True
+    except OSError:
+        return False
+
+
+def mark_sent(path: str | Path, updates: list[dict]) -> Path | None:
+    """Write Send Status / Sent At back to the workbook.
+
+    If the workbook is open in Excel the write fails, and after a long live
+    send that would silently discard every status. Park the updates in a
+    sidecar JSON instead and merge them on the next successful write, so a
+    locked file can never cause a professor to be mailed twice.
+
+    Returns the sidecar path if the write was deferred, else None.
+    """
+    path = Path(path)
+    sidecar = sidecar_path(path)
+    pending: list[dict] = []
+    if sidecar.exists():
+        try:
+            pending = json.loads(sidecar.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            pending = []
+    # Later updates for the same cell win.
+    merged: dict[tuple, dict] = {}
+    for upd in [*pending, *updates]:
+        merged[(upd["sheet"], upd["row"])] = upd
+    updates = list(merged.values())
+
+    try:
+        wb = load_workbook(path)
+    except OSError:
+        _park(sidecar, updates)
+        return sidecar
     for upd in updates:
         ws = wb[upd["sheet"]]
         header_row = _find_header_row(ws)
@@ -315,4 +376,16 @@ def mark_sent(path: str | Path, updates: list[dict]) -> None:
                 headers[name.lower()] = col
         ws.cell(row=upd["row"], column=headers["send status"], value=upd["status"])
         ws.cell(row=upd["row"], column=headers["sent at"], value=upd.get("sent_at", ""))
-    wb.save(path)
+    try:
+        wb.save(path)
+    except OSError:
+        _park(sidecar, updates)
+        return sidecar
+    sidecar.unlink(missing_ok=True)
+    return None
+
+
+def _park(sidecar: Path, updates: list[dict]) -> None:
+    slim = [{"sheet": u["sheet"], "row": u["row"], "status": u["status"],
+             "sent_at": u.get("sent_at", "")} for u in updates]
+    sidecar.write_text(json.dumps(slim, indent=2), encoding="utf-8")

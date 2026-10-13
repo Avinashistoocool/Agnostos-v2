@@ -258,6 +258,35 @@ def main() -> int:
     assert len(forced) == 8
     print("    ok: dry-run never blocks, real sends do, --resend overrides")
 
+    print("[9a] a locked workbook parks statuses instead of losing them")
+    import outreach.excel_io as _xio
+    from outreach.excel_io import is_writable, sidecar_path
+    assert is_writable(src)
+    locked_updates = [{**u, "status": "failed: SMTPServerDisconnected",
+                       "sent_at": ""} for u in updates[:3]]
+    real_load = _xio.load_workbook
+
+    def _locked(*a, **kw):
+        raise OSError("file is open in Excel")
+
+    _xio.load_workbook = _locked
+    try:
+        deferred = mark_sent(src, locked_updates)
+    finally:
+        _xio.load_workbook = real_load
+    assert deferred == sidecar_path(src) and deferred.exists()
+    by_row = {r["row"]: r for r in load_for_sending(src)}
+    assert all(by_row[u["row"]]["send_status"] == "failed: SMTPServerDisconnected"
+               for u in locked_updates), "parked statuses were not applied on read"
+    # The next successful write drains the sidecar into the workbook.
+    assert mark_sent(src, []) is None
+    assert not sidecar_path(src).exists()
+    by_row = {r["row"]: r for r in load_for_sending(src)}
+    assert all(by_row[u["row"]]["send_status"] == "failed: SMTPServerDisconnected"
+               for u in locked_updates), "parked statuses were not persisted"
+    mark_sent(src, [{**u, "status": "sent"} for u in locked_updates])
+    print("    ok: parked to sidecar, honoured on read, drained on next write")
+
     print("[9b] review redirect keeps the real target visible")
     reviewer = Mailer(settings, profile, dry_run=True, redirect_to="me@example.com")
     msg = reviewer.send_one(rows3[0])["message"]

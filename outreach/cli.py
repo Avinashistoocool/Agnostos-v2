@@ -16,7 +16,7 @@ from pathlib import Path
 
 from .config import MODEL_PRICES, PROVIDERS, ConfigError, settings
 from .enrich import OpenAlexClient
-from .excel_io import (load_for_sending, load_targets, mark_sent,
+from .excel_io import (is_writable, load_for_sending, load_targets, mark_sent,
                        update_workbook, write_new_workbook)
 from .llm import LLMEvaluator, confirm_gate, list_models
 from .mailer import Mailer
@@ -269,6 +269,12 @@ def cmd_send(args) -> int:
         print(" Nothing to send. Run the `run` command first.")
         return 1
 
+    if not dry_run and not is_writable(path):
+        print(_safe(f" ERROR: {path.name} is open in Excel (or otherwise locked)."))
+        print(" Close it before sending — statuses must be written back, or the")
+        print(" same professors could be mailed twice on the next run.")
+        return 1
+
     if not dry_run:
         target_desc = (f"ALL to {review_to} (review copies)" if review_to
                        else "the professors themselves")
@@ -308,13 +314,17 @@ def cmd_send(args) -> int:
         updates = mailer.send_batch(rows, progress=progress, resend=args.resend,
                                     top=args.top)
 
-    mark_sent(path, updates)
+    deferred = mark_sent(path, updates)
     sent = sum(1 for u in updates if u["status"] == "sent")
     review = sum(1 for u in updates if u["status"] == "review-sent")
     failed = [u for u in updates if u["status"].startswith("failed")]
     print(f"\n Done. sent={sent} review-sent={review} "
           f"dry-run={sum(1 for u in updates if u['status'] == 'dry-run')} "
           f"failed={len(failed)} | statuses written back to {path.name}")
+    if deferred:
+        print(_safe(f" NOTE: {path.name} was locked, so statuses were parked in "
+                    f"{deferred.name}."))
+        print(" They are applied automatically on the next run — nobody will be mailed twice.")
     if failed:
         first = failed[0]
         print(_safe(f" First failure: {first['status']}"))

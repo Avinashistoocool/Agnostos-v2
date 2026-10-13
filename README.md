@@ -287,6 +287,17 @@ University relays throttle aggressively. If a message is refused or the socket d
 
 If you see `SMTPSenderRefused` or repeated `SMTPServerDisconnected`, the relay is almost certainly rate-limiting you. Raise `SEND_DELAY_MIN`/`SEND_DELAY_MAX` (300/600 is safe for a university server), lower `DAILY_SEND_CAP`, and send in small batches with `--top 5`. Also confirm `SMTP_FROM` is exactly the address `SMTP_USER` is allowed to send as — most relays refuse any mismatch.
 
+### The spreadsheet is the database
+
+There is no separate database — the workbook at `TARGET_XLSX` holds everything, and the `Send Status` column is the only record of who has been contacted. Rows marked `sent` or `review-sent` are skipped forever; anything else (blank, `dry-run`, `failed: …`) is still a candidate. So:
+
+- `--top 50` after a `--top 10` run mails the next 40, not the first 10 again.
+- Editing or clearing `Send Status` by hand *will* change who gets mailed — clearing a `sent` cell re-sends that email.
+- Adding rows with a draft and an email address adds new targets; deleting rows removes them.
+- `--resend` deliberately ignores `Send Status` and mails everything matching the filters.
+
+Because that column is the only safeguard, `send --live` refuses to start if the workbook is open in Excel, and if the file becomes locked mid-run the statuses are parked in `<workbook>.xlsx.pending-status.json` and applied on the next run instead of being lost.
+
 ---
 
 ## License
