@@ -6,6 +6,7 @@ import random
 import re
 import smtplib
 import ssl
+import sys
 import time
 from datetime import datetime
 from email.message import EmailMessage
@@ -229,5 +230,23 @@ class Mailer:
             consecutive_failures = 0
             if i < len(pending) and result["status"] in {"sent", "review-sent"}:
                 delay = random.uniform(self.s.send_delay_min, self.s.send_delay_max)
-                time.sleep(delay)
+                self._countdown(delay)
         return updates
+
+    @staticmethod
+    def _countdown(delay: float) -> None:
+        """Sleep for `delay` seconds while showing a live timer on the console."""
+        start = time.monotonic()
+        total = f"{int(delay) // 60:02d}:{int(delay) % 60:02d}"
+        while True:
+            elapsed = time.monotonic() - start
+            left = delay - elapsed
+            if left <= 0:
+                break
+            e, l = int(elapsed), int(left + 0.999)
+            sys.stdout.write(f"\r    waiting {e // 60:02d}:{e % 60:02d} / {total} "
+                             f"(next email in {l // 60:02d}:{l % 60:02d})  ")
+            sys.stdout.flush()
+            time.sleep(min(1.0, left))
+        sys.stdout.write(f"\r    waited {total} between emails{' ' * 30}\n")
+        sys.stdout.flush()
