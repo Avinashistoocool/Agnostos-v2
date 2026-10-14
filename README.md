@@ -2,9 +2,11 @@
 An autonomous, token-efficient pipeline for research internship outreach. Agnostos matches your CV against prospective supervisors, retrieves their recent publications, predicts acceptance probability, drafts tailored cold emails without generic LLM prose, and throttles outbound SMTP delivery.
 
 ```
-resume.pdf ─┐
+                 discover (OpenAlex, free) ─► verify --repair (web lookup, free)
+                                   │
+resume.pdf ─┐                      ▼
             ├─► local NLP filter (free) ─► [Y/N] cost gate ─► LLM ─► .xlsx ─► SMTP
-targets ────┘        ▲ OpenAlex enrichment (free)
+targets ────┘        ▲ OpenAlex enrichment (free)            recheck ─┘
 ```
 
 Point it at your CV and a spreadsheet of professors. It reads your resume, ranks the list against it for free, looks up each professor's recent papers, writes a specific email per person, strips the AI tells out of the prose, and sends them on a human-looking schedule — writing every draft and status back into your spreadsheet as it goes.
@@ -114,7 +116,7 @@ Builds a large, ranked list of professors without you naming a single university
 **How batching works.** `--count` is split evenly over `--batches` (1000 / 4 = 250 each). Each batch takes one topic from `--query` (separate topics with `;`); with fewer topics than batches they are reused, and a reused topic *continues from the page the previous batch reached*, so it finds new people rather than the same ones. A batch keeps reading pages until it has its quota of senior researchers, its topic runs out of relevant papers, or it hits `--max-pages`. Any shortfall is carried to the next batch.
 
 - **Nobody is added twice** — across batches, and against everyone already in the output workbook (by OpenAlex id and by accent/order-insensitive name).
-- **Each batch is saved the moment it finishes**, and progress is kept in `<output>.batches.json`. If the run is interrupted, re-run the same command and it resumes at the first unfinished batch. Changing any option starts a new plan; `--fresh` forces one.
+- **Each batch is saved the moment it finishes**, and progress is kept in `<output>.batches.json`. If the run is interrupted, re-run the same command and it resumes at the first unfinished batch. `--fresh` forces a new plan (see below for which options also do).
 - **Off-topic results are dropped.** Free-text search matches words, not meaning ("geometric deep learning" also hits papers about tooth geometry). Each topic's own best results define which broad fields it belongs to, and papers from other fields, or far below the top relevance, are ignored. Nothing about subjects is hardcoded.
 
 | Flag | Purpose |
@@ -378,7 +380,7 @@ python tests/openai_stub_test.py    # real OpenAI SDK against a local stub serve
 
 Both suites run on a fresh clone with **no `.env` and no API key** — they fall back to synthetic fixtures (`tests/fixtures/`) generated on demand. If your `.env` points at real files, those are used instead, so the same tests double as a check of your own setup. CI runs them on Python 3.10, 3.12, and 3.13.
 
-`smoke_test.py` covers resume parsing, Excel round-trips, filter behaviour, cost maths on both free and paid providers, a mocked LLM pass, early abort on repeated API failures, draft formatting repair, the humanising layer, idempotent column writes, attachment handling, resume-safety on interrupted sends, `.eml` export, scraper extraction, and block detection.
+`smoke_test.py` covers resume parsing, Excel round-trips, filter behaviour, cost maths on both free and paid providers, a mocked LLM pass, early abort on repeated API failures, draft formatting repair, the humanising layer, idempotent column writes, attachment handling, resume-safety on interrupted sends, `.eml` export, scraper extraction, block detection, email verification, discovery batch planning and resume fingerprints, append-only workbook growth, institution matching for `recheck`, skipping already-sent rows (including ones parked in the pending sidecar), and the rule that `--apply` never replaces an address that already passed.
 
 `openai_stub_test.py` boots a local HTTP server, points the real `openai` SDK at it, and asserts the request shape, cached-token accounting, temperature omission for reasoning models, truncation handling, **capability downgrade against a restrictive gateway**, and Groq provider wiring.
 
@@ -403,7 +405,30 @@ There is no separate database — the workbook at `TARGET_XLSX` holds everything
 - Adding rows with a draft and an email address adds new targets; deleting rows removes them.
 - `--resend` deliberately ignores `Send Status` and mails everything matching the filters.
 
-Because that column is the only safeguard, `send --live` refuses to start if the workbook is open in Excel, and if the file becomes locked mid-run the statuses are parked in `<workbook>.xlsx.pending-status.json` and applied on the next run instead of being lost.
+Because that column is the only safeguard, `send --live` refuses to start if the workbook is open in Excel, and if the file becomes locked mid-run the statuses are parked in `<workbook>.xlsx.pending-status.json` and applied on the next run instead of being lost. Rows parked there count as sent everywhere — `send`, `verify` and `recheck` all skip them.
+
+`verify` and `recheck` leave already-mailed rows untouched by default (pass `--include-sent` to override), so re-checking a list you have partly worked through never rewrites the addresses you actually used.
+
+### Scaling up without mailing anyone twice
+
+```bash
+# 1. Grow a fresh list, skipping everyone already in your existing workbook(s)
+python -m outreach.cli discover --count 500 --batches 4 \
+    --query "physics; artificial intelligence; computational physics" \
+    --output output/professors_500.xlsx --exclude path/to/your_current_list.xlsx
+
+# 2. Find each person's current published address
+python -m outreach.cli verify --xlsx output/professors_500.xlsx --repair --apply --workers 6
+
+# 3. Score and draft, then send the best ones in small batches
+python -m outreach.cli run --mode list --xlsx output/professors_500.xlsx
+python -m outreach.cli send --xlsx output/professors_500.xlsx --live --top 10
+
+# Later: is everyone still there, and are the addresses still current?
+python -m outreach.cli recheck --xlsx output/professors_500.xlsx --apply
+```
+
+Every step is resumable: interrupt it and re-run the same command. Close the workbook in Excel before any step that writes to it.
 
 ---
 
