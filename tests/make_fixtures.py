@@ -5,7 +5,6 @@ sample target workbook. Both are synthetic — no real person, no real contact.
 """
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"

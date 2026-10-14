@@ -453,7 +453,8 @@ class LLMEvaluator:
             self.evaluate_one(prof, model=model)
             if progress:
                 progress(i, len(professors), prof)
-            consecutive_failures = 0 if prof.probability else consecutive_failures + 1
+            ok = prof.llm_status.startswith("ok")
+            consecutive_failures = 0 if ok else consecutive_failures + 1
             if consecutive_failures >= 3:
                 for rest in professors[i:]:
                     rest.llm_status = "skipped: aborted after repeated failures"

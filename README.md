@@ -130,7 +130,11 @@ Builds a large, ranked list of professors without you naming a single university
 | `--output PATH` | Workbook to grow (default `output/professors.xlsx`) |
 | `--verify-emails` | Look up each person's current address as each batch finishes (slow; see `verify`) |
 | `--workers N` | Parallel email lookups (default `VERIFY_WORKERS`, `4`) |
+| `--exclude XLSX` | Skip anyone already in this workbook (repeatable; a missing path prints a warning) |
+| `--resume PATH` | Resume used to derive default topics when `--query` is omitted |
 | `--fresh` | Discard saved batch progress |
+
+Progress is saved in `<output>.batches.json` after each batch, so re-running the same command resumes. Changing the topics, count, batches, countries, `--since`, `--min-h-index` or `--min-works` starts a new plan; `--max-pages` and `--exclude` can be changed without losing progress. If the output workbook is open in Excel when a batch finishes, the tool waits for you to close it rather than dropping the batch.
 
 No API key is needed and nothing is scraped — OpenAlex is a free public index (set `OPENALEX_MAILTO` or `OPENALEX_API_KEY` for a faster, more reliable quota on big runs). Discovered rows carry a name, institution, country, research summary and OpenAlex id, but **no email address**; that is what `verify --repair` is for.
 
@@ -151,7 +155,15 @@ python -m outreach.cli recheck --apply              # also replace stale address
 python -m outreach.cli recheck --professors-only    # fast: OpenAlex only, no web search
 ```
 
-For every row it pulls the person's OpenAlex author record and marks them `active`, `moved` (now publishing from a different institution — acronyms like KIT, EPFL or CERN are resolved through OpenAlex, not a table), `inactive` (no papers for 3+ years) or `not found`, in a **Profile Status** column. It then re-runs the `verify --repair` email lookup for every row. `--emails-only`, `--workers`, `--no-dns`, `--sheet` and `--no-backup` work as in `verify`.
+For every row not yet mailed it pulls the person's OpenAlex author record and marks them `active`, `moved` (now publishing from a different institution — acronyms like KIT, EPFL or CERN are resolved through OpenAlex, not a table), `inactive` (no papers for 3+ years) or `not found` (no author record matching both the name and the listed institution), in a **Profile Status** column. A lookup that fails (network error, rate limit) leaves the previous status untouched. A blank Institution or OpenAlex ID cell is filled in from the record; filled cells are never overwritten. It then re-runs the `verify --repair` email lookup for the same rows.
+
+| Flag | Purpose |
+|---|---|
+| `--apply` | Replace missing or failing addresses with the one found online |
+| `--professors-only` / `--emails-only` | Run only one half of the check |
+| `--include-sent` | Also recheck rows already marked `sent`/`review-sent` (skipped by default) |
+| `--dry-run` | Report only, never touch the workbook |
+| `--xlsx`, `--sheet`, `--workers`, `--no-dns`, `--no-backup` | As in `verify` |
 
 ### `verify` — check and repair email addresses
 
@@ -165,9 +177,10 @@ Every address is checked for syntax, for whether the domain actually accepts mai
 | Flag | Purpose |
 |---|---|
 | `--xlsx PATH` / `--sheet NAME` | Which workbook and sheet to check |
-| `--top N` | Only check the N highest-probability rows |
+| `--top N` | Only check the N highest-probability rows (by `Probability of Acceptance`, falling back to a `Probability` column) |
 | `--repair` | Search the web and read profile pages for the real address |
-| `--apply` | Write the suggested address into the Email column |
+| `--apply` | Write the found address into the Email column when the current one is missing or not `ok`; a passing address is kept and the alternative left in `Suggested Email` |
+| `--include-sent` | Also check rows already marked sent (skipped by default) |
 | `--probe-smtp` | Ask the mail server whether the mailbox exists (advisory only) |
 | `--no-dns` | Skip MX/A lookups |
 | `--workers N` | Parallel lookups (default `VERIFY_WORKERS`, `4`) |
@@ -185,20 +198,25 @@ python -m outreach.cli send --live --top 10 --min-probability 60
 | Flag | Purpose |
 |---|---|
 | `--live` | Actually send (default is dry-run) |
+| `--dry-run` | Explicit dry run (the default) |
+| `--review` | Mail every draft to yourself (`SMTP_FROM`) instead of the professor |
+| `--review-to ADDR` | Like `--review`, to a different address |
+| `--export` | Write `.eml` files instead of sending (`--export-dir DIR`, default `output/drafts`) |
 | `--top N` | Email only the **N highest-probability** professors |
-| `--limit N` | Max emails this run, in sheet order |
+| `--limit N` | Max real sends this run (overrides `DAILY_SEND_CAP`) |
 | `--min-probability N` | Only send to rows scoring ≥ N% |
+| `--allow-unverified` | Also send to rows whose Email Status is `invalid` |
 | `--delay-min/--delay-max S` | Randomised gap between sends |
 | `--resend` | Re-send rows already marked sent |
 | `--preview N` | How many full drafts to print in dry-run |
-| `--export DIR` | Write `.eml` files instead of sending |
+| `--xlsx PATH` / `--sheet NAME` / `--resume PATH` | Workbook, sheet, and resume (for the signature) |
 
 **Choosing how many to mail.** Three knobs, combinable:
 
 - `--top N` ranks the drafted rows by acceptance probability and mails the best N. This is usually what you want.
 - `--min-probability N` sets a quality floor instead of a count.
-- `--limit N` is a blunt cap in spreadsheet order.
-- `DAILY_SEND_CAP` in `.env` is the standing ceiling across runs.
+- `--limit N` caps how many emails are actually sent in this run, applied after the `--top` ordering.
+- `DAILY_SEND_CAP` in `.env` is the default for `--limit`: a per-run cap on real sends (it does not count earlier runs that day).
 
 Rows already marked `sent` are skipped automatically, so an interrupted run is safe to resume. Dry runs never block a later real send.
 
@@ -260,7 +278,7 @@ The score and any review flags are written into the spreadsheet so you can sort 
 
 **7. Data management** (`excel_io.py`) — Mode B appends result columns in place (after a timestamped backup); Mode A writes a fresh sorted workbook:
 
-`Local Match Score` · `Probability of Acceptance` · `Probability Justification` · `Email Subject` · `Custom Email Draft` · `AI-Tell Score` · `Review Flags` · `LLM Status` · `Send Status` · `Sent At` · `Reply Status` · `Follow-up Notes`
+`Local Match Score` · `Probability of Acceptance` · `Probability Justification` · `Email Subject` · `Custom Email Draft` · `AI-Tell Score` · `Review Flags` · `Email Status` · `Email Confidence` · `Email Notes` · `Suggested Email` · `Profile Status` · `LLM Status` · `Send Status` · `Sent At` · `Reply Status` · `Follow-up Notes` (plus `OpenAlex ID` and `Institution`, filled in only when blank)
 
 Re-running is idempotent — existing columns are refreshed, never duplicated, and blank LLM results never overwrite cells you edited by hand. The humanised draft is what lands in `Custom Email Draft`, so you can edit it in Excel and send exactly what you read. `Reply Status` and `Follow-up Notes` are yours to maintain.
 

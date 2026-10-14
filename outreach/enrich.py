@@ -46,6 +46,7 @@ class OpenAlexClient:
     def _get(self, path: str, params: dict) -> dict | None:
         if self.rate_limited:
             return None
+        self.last_error = ""
         if self.mailto:
             params["mailto"] = self.mailto
         if self.api_key:
@@ -93,7 +94,14 @@ class OpenAlexClient:
         text = " ".join(w for _, w in sorted(positions))
         return text[:limit]
 
-    def find_author(self, prof: Professor) -> dict | None:
+    def find_author(self, prof: Professor, strict: bool = False) -> dict | None:
+        """Best OpenAlex author record for `prof`.
+
+        With `strict`, only a record whose affiliations match the stated
+        institution is returned; otherwise the top name hit is used as a
+        fallback. Fallbacks are never cached, so a later strict lookup can't
+        be fed a namesake at another university.
+        """
         name = self._clean_name(prof.name)
         if not name:
             return None
@@ -102,6 +110,7 @@ class OpenAlexClient:
             return self.cache[key]
         data = self._get("/authors", {"search": name, "per-page": 5})
         best = None
+        matched = False
         if data and data.get("results"):
             inst_low = prof.institution.lower()
             for cand in data["results"]:
@@ -118,10 +127,11 @@ class OpenAlexClient:
                                if t not in {"university", "institute", "college"}]
                 if inst_tokens and any(t in blob for t in inst_tokens):
                     best = cand
+                    matched = True
                     break
-            if best is None:
+            if best is None and not strict:
                 best = data["results"][0]
-        if best:                 # a miss may be a rate limit; retry next time
+        if matched:              # a miss may be a rate limit; retry next time
             self.cache[key] = best
         return best
 

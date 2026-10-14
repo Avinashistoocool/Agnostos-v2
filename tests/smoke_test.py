@@ -443,7 +443,7 @@ def main() -> int:
 
     print("[13] topic discovery helpers (no network)")
     from outreach.discover import (Candidate, _best_name, _this_year,
-                                   merge_professors, resolve_countries)
+                                   resolve_countries, to_professor)
     from outreach.models import Professor
     assert resolve_countries("uk") == ["gb"]
     assert resolve_countries("de,ch") == ["de", "ch"]
@@ -457,15 +457,9 @@ def main() -> int:
     bulk = Candidate(author_id="A2", name="B", hits=4, lead_hits=0,
                      newest_year=0, h_index=0)
     assert lead.score > bulk.score, (lead.score, bulk.score)
-    kept = [Professor(name="Tilman Plehn", institution="Heidelberg",
-                      openalex_id="A5")]
-    fresh = [Professor(name="Tilman Plehn", institution="Heidelberg",
-                       openalex_id="A5"),
-             Professor(name="Other Person", institution="EPFL",
-                       openalex_id="A6")]
-    merged, added = merge_professors(kept, fresh)
-    assert (len(merged), added) == (2, 1), (len(merged), added)
-    print("    ok: country groups, name repair, lead-author ranking, dedupe")
+    # Unverified discovered rows must not claim an "Email Confidence" of 0%.
+    assert to_professor(lead).email_status == ""
+    print("    ok: country groups, name repair, lead-author ranking, blank status")
 
     print("[14] batch planner, append, recheck helpers (no network)")
     from outreach.batches import name_key, plan_batches, split_queries
@@ -487,6 +481,57 @@ def main() -> int:
     assert same_institution("Heidelberg University", "Universität Heidelberg")
     assert not same_institution("Heidelberg University", "ETH Zurich")
     print("    ok: even quotas, round-robin topics, name keys, append, institution match")
+
+    print("[15] review_1 regressions (no network)")
+    import json as _json
+    from outreach.batches import fingerprint
+    from outreach.cli import _drop_sent
+    from outreach.excel_io import sidecar_path, update_workbook as _upd15
+    from outreach import verify as _v
+    # Defaults keep the old fingerprint, so in-progress runs still resume.
+    base = fingerprint(["q"], 10, 2, ["de"], 2021, 8, 20)
+    assert fingerprint(["q"], 10, 2, ["de"], 2021, 8, 20, {}) == base
+    assert fingerprint(["q"], 10, 2, ["de"], 2021, 8, 20,
+                       {"min_relevance": 0.3}) != base
+    # A send parked in the sidecar counts as done.
+    side = sidecar_path(book)
+    side.write_text(_json.dumps([{"sheet": rows[0].source_sheet,
+                                  "row": rows[0].source_row,
+                                  "status": "sent", "sent_at": ""}]),
+                    encoding="utf-8")
+    left = _drop_sent(book, _load14(book))
+    assert [r.name for r in left] == ["B Two"], [r.name for r in left]
+    side.unlink()
+    # update_workbook fills a blank OpenAlex ID but never overwrites one.
+    r2 = _load14(book)
+    r2[0].openalex_id, r2[1].openalex_id = "CHANGED", "A2"
+    _upd15(book, r2, make_backup=False)
+    assert [r.openalex_id for r in _load14(book)] == ["A1", "A2"]
+    # --apply keeps a verified address and only replaces a bad/missing one.
+    orig = _v.verify_professor
+
+    def fake(prof, **kw):
+        if prof.email == "good@epfl.ch":
+            return _v.EmailCheck(email=prof.email, status=_v.OK, confidence=90,
+                                 suggestion="g.alt@epfl.ch", source="page")
+        if prof.email == "new@epfl.ch":
+            return _v.EmailCheck(email=prof.email, status=_v.OK, confidence=95)
+        return _v.EmailCheck(email=prof.email, status=_v.SUSPECT, confidence=30,
+                             suggestion="new@epfl.ch", source="page")
+    _v.verify_professor = fake
+    try:
+        pa = Professor(name="Keep Me", email="good@epfl.ch")
+        pb = Professor(name="Fix Me", email="bad@old.org")
+        _v.verify_many([pa, pb], workers=2, repair=True, apply=True, check_dns=False)
+    finally:
+        _v.verify_professor = orig
+    assert pa.email == "good@epfl.ch" and "g.alt@epfl.ch" in pa.email_suggestion
+    assert pb.email == "new@epfl.ch" and "replaced bad@old.org" in pb.email_notes
+    with _v._quiet_stderr():
+        with _v._quiet_stderr():
+            pass
+    assert _v._QUIET["depth"] == 0
+    print("    ok: fingerprint compat, sidecar skip, fill-blank ids, safe --apply")
 
     shutil.rmtree(TMP)
     print("\nALL SMOKE TESTS PASSED")

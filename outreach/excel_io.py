@@ -207,7 +207,16 @@ def update_workbook(path: str | Path, professors: list[Professor],
                 result_cols[name] = next_col
                 next_col += 1
         _style_sheet(ws, header_row, result_cols)
+        # Identity columns the user owns: only filled in when empty (recheck
+        # can discover them), never overwritten.
+        fill_cols = {attr: headers[h] for h, attr in
+                     (("openalex id", "openalex_id"), ("institution", "institution"))
+                     if h in headers}
         for p in profs:
+            for attr, col in fill_cols.items():
+                cell = ws.cell(row=p.source_row, column=col)
+                if cell.value in (None, "") and getattr(p, attr, ""):
+                    cell.value = getattr(p, attr)
             values = _result_values(p)
             for name, col in result_cols.items():
                 val = values.get(name)

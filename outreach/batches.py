@@ -105,10 +105,21 @@ def plan_batches(queries: list[str], count: int, batches: int) -> list[BatchSpec
 
 
 def fingerprint(queries: list[str], count: int, batches: int, countries: list[str],
-                since_year: int, min_h_index: int, min_works: int) -> str:
-    """Identifies a run, so a changed command never resumes a stale state."""
-    raw = json.dumps([queries, count, batches, sorted(countries), since_year,
-                      min_h_index, min_works])
+                since_year: int, min_h_index: int, min_works: int,
+                extra: dict | None = None) -> str:
+    """Identifies a run, so a changed command never resumes a stale state.
+
+    `extra` holds options that change *which* papers qualify (relevance
+    floor, institution types). They are only hashed when set, so runs
+    started with the defaults keep their fingerprint. The page cap and
+    --exclude lists are deliberately left out: raising the cap or excluding
+    more people should continue a run, not restart it.
+    """
+    parts = [queries, count, batches, sorted(countries), since_year,
+             min_h_index, min_works]
+    if extra:
+        parts.append(sorted(extra.items()))
+    raw = json.dumps(parts)
     return hashlib.sha1(raw.encode()).hexdigest()[:12]
 
 
@@ -129,12 +140,16 @@ def run_batch(disc: Discoverer, spec: BatchSpec, state: BatchState,
     checked: set[str] = set()
     senior: dict[str, Candidate] = {}
     cursor = state.cursors.get(spec.query, "*")
+    disc.last_error = ""
+    page_error = ""
 
     while result.pages < max_pages and len(senior) < spec.quota:
         works, next_cursor, total = disc.fetch_page(
             spec.query, countries, since_year, cursor=cursor, inst_types=inst_types)
         if not works:
-            if not disc.last_error:
+            if disc.last_error:
+                page_error = disc.last_error
+            else:
                 result.exhausted = True
             break
         result.pages += 1
@@ -195,7 +210,9 @@ def run_batch(disc: Discoverer, spec: BatchSpec, state: BatchState,
         skip_ids.add(cand.author_id)
         skip_names.add(name_key(cand.name))
     result.found = len(professors)
-    result.error = disc.last_error
+    # Only a failed page fetch is a batch error; a later lookup that failed
+    # (e.g. one homepage) must not mark a finished batch as broken.
+    result.error = page_error
     disc.save_cache()
     return professors, result
 
@@ -215,7 +232,13 @@ def run_batches(queries: list[str], count: int = 1000, batches: int = 4,
     dropped connection in batch four.
     """
     codes = resolve_countries(countries)
-    fp = fingerprint(queries, count, batches, codes, since_year, min_h_index, min_works)
+    extra = {}
+    if min_relevance != 0.1:
+        extra["min_relevance"] = min_relevance
+    if inst_types is not None:
+        extra["inst_types"] = sorted(inst_types)
+    fp = fingerprint(queries, count, batches, codes, since_year, min_h_index,
+                     min_works, extra)
     state = BatchState.load(state_path, fp) if state_path else BatchState(fingerprint=fp)
     disc = Discoverer(mailto=mailto, api_key=api_key, cache_path=cache_path)
 

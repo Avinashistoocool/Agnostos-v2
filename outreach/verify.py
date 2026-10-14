@@ -35,6 +35,7 @@ import socket
 import ssl
 import subprocess
 import sys
+import threading
 import time
 import unicodedata
 import urllib.error
@@ -46,6 +47,10 @@ from pathlib import Path
 from .models import Professor
 
 
+_QUIET_LOCK = threading.Lock()
+_QUIET = {"depth": 0, "saved": None, "devnull": None}
+
+
 @contextlib.contextmanager
 def _quiet_stderr():
     """Mute stderr for the duration of the block.
@@ -54,23 +59,34 @@ def _quiet_stderr():
     connection errors straight to file descriptor 2, so they cannot be caught
     or filtered in Python. They are noise - the failure is already handled by
     moving to the next backend - but they bury the progress report.
+
+    fd 2 is process-wide and verification runs in threads, so the redirect is
+    reference-counted: the first thread in mutes it, the last one out restores
+    it. Without that, overlapping threads restore each other's devnull and
+    stderr stays muted for the rest of the run.
     """
     try:
         fd = sys.stderr.fileno()
     except (AttributeError, ValueError, OSError):
         yield                      # already redirected somewhere unusual
         return
-    saved = os.dup(fd)
-    devnull = os.open(os.devnull, os.O_WRONLY)
+    with _QUIET_LOCK:
+        if _QUIET["depth"] == 0:
+            sys.stderr.flush()
+            _QUIET["saved"] = os.dup(fd)
+            _QUIET["devnull"] = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(_QUIET["devnull"], fd)
+        _QUIET["depth"] += 1
     try:
-        sys.stderr.flush()
-        os.dup2(devnull, fd)
         yield
     finally:
-        sys.stderr.flush()
-        os.dup2(saved, fd)
-        os.close(saved)
-        os.close(devnull)
+        with _QUIET_LOCK:
+            _QUIET["depth"] -= 1
+            if _QUIET["depth"] == 0:
+                sys.stderr.flush()
+                os.dup2(_QUIET["saved"], fd)
+                os.close(_QUIET["saved"])
+                os.close(_QUIET["devnull"])
 
 
 def _ssl_context():
@@ -453,16 +469,27 @@ class EmailFinder:
         self.openalex = openalex
         self.search_error = ""
         self._good_backend = ""
-        self._last = 0.0
         self._page_cache: dict[str, str] = {}
         self._search_cache: dict[str, list[str]] = {}
+
+    # Shared by every finder (one per worker thread), so N workers still
+    # space their requests to any one host by `delay`, rather than hitting the
+    # same university or search engine N times at once.
+    _host_lock = threading.Lock()
+    _host_next: dict[str, float] = {}
+
+    def _pace(self, host: str) -> None:
+        with EmailFinder._host_lock:
+            now = time.monotonic()
+            slot = max(now, EmailFinder._host_next.get(host, 0.0))
+            EmailFinder._host_next[host] = slot + self.delay
+        if slot > now:
+            time.sleep(slot - now)
 
     def _fetch(self, url: str) -> str:
         if url in self._page_cache:
             return self._page_cache[url]
-        wait = self.delay - (time.monotonic() - self._last)
-        if wait > 0:
-            time.sleep(wait)
+        self._pace(urllib.parse.urlparse(url).netloc.lower())
         req = urllib.request.Request(url, headers={
             "User-Agent": _UA,
             "Accept": "text/html,application/xhtml+xml",
@@ -477,8 +504,6 @@ class EmailFinder:
                 text = raw.decode(charset, errors="replace")
         except Exception:
             text = ""
-        finally:
-            self._last = time.monotonic()
         self._page_cache[url] = text
         return text
 
@@ -547,6 +572,7 @@ class EmailFinder:
             order.remove(self._good_backend)
             order.insert(0, self._good_backend)
         for backend in order:
+            self._pace("search:" + backend)
             try:
                 with _quiet_stderr():
                     rows = DDGS(timeout=int(self.timeout)).text(
@@ -662,6 +688,9 @@ class EmailFinder:
         return best[1], best[2], best[0]
 
 
+_CACHE_LOCK = threading.Lock()
+
+
 def verify_professor(prof: Professor, finder: EmailFinder | None = None,
                      check_dns: bool = True, probe: bool = False,
                      mail_from: str = "", repair: bool = False,
@@ -676,7 +705,8 @@ def verify_professor(prof: Professor, finder: EmailFinder | None = None,
     score = 0.0
     key = f"{prof.name.strip().lower()}|{(prof.institution or '').strip().lower()}"
     if repair and finder:
-        hit = (cache or {}).get(key)
+        with _CACHE_LOCK:
+            hit = (cache or {}).get(key)
         if hit:
             found, source, score = hit.get("email", ""), hit.get("source", ""), hit.get("score", 0.0)
         else:
@@ -684,7 +714,8 @@ def verify_professor(prof: Professor, finder: EmailFinder | None = None,
             if cache is not None and found:
                 # A miss is usually a blocked search engine, not a settled
                 # answer - caching it would make the next run miss too.
-                cache[key] = {"email": found, "source": source, "score": score}
+                with _CACHE_LOCK:
+                    cache[key] = {"email": found, "source": source, "score": score}
 
     known = (domain_of(found),) if found else ()
     res = check_email(prof.name, prof.email, prof.institution, known,
@@ -721,11 +752,10 @@ def verify_many(professors: list[Professor], workers: int = 4,
 
     The finder is I/O-bound (search engines and university pages), so a few
     threads cut a thousand-row recheck from hours to a fraction of that. Each
-    finder keeps its own politeness delay, so no single site is hammered.
+    finder shares one per-host politeness schedule, so no site is hammered.
     `on_result(index, prof, res)` is called from the main thread, in
     completion order.
     """
-    import threading
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     local = threading.local()
@@ -739,13 +769,20 @@ def verify_many(professors: list[Professor], workers: int = 4,
         res = verify_professor(prof, finder=finder(), check_dns=check_dns,
                                probe=probe, mail_from=mail_from,
                                repair=repair, cache=cache)
-        if apply and res.suggestion:
-            # Re-check the adopted address so the row ends up with the
-            # status/confidence of the address it now holds.
+        old = (prof.email or "").strip()
+        # Only replace an address that is missing or failed its checks. An
+        # address that passed (same site, name matches) is left alone and the
+        # alternative spelling stays in Suggested Email for a human to judge.
+        if apply and res.suggestion and (not old or res.status != OK):
             prof.email = res.suggestion
+            # Re-check so the row gets the status of the address it now holds.
             res = verify_professor(prof, finder=finder(), check_dns=check_dns,
                                    probe=probe, mail_from=mail_from,
                                    repair=repair, cache=cache)
+            if old:
+                res.reasons.append(f"replaced {old}")
+            if not res.suggestion:
+                res.suggestion, res.source = prof.email, "adopted"
         return res
 
     counts = {OK: 0, SUSPECT: 0, INVALID: 0, UNKNOWN: 0}
@@ -778,8 +815,10 @@ def load_cache(path: Path) -> dict:
 
 
 def save_cache(path: Path, data: dict) -> None:
+    with _CACHE_LOCK:
+        snapshot = dict(data)       # workers may still be writing to `data`
     try:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-        Path(path).write_text(json.dumps(data, indent=1), encoding="utf-8")
-    except OSError:
+        Path(path).write_text(json.dumps(snapshot, indent=1), encoding="utf-8")
+    except (OSError, TypeError, ValueError):
         pass

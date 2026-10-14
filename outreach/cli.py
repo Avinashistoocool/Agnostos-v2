@@ -22,7 +22,7 @@ from .batches import plan_batches, run_batches, split_queries
 from .discover import COUNTRY_GROUPS
 from .enrich import OpenAlexClient
 from .excel_io import (_column_index, _find_header_row, append_rows, is_writable,
-                       load_for_sending, load_targets, mark_sent,
+                       load_for_sending, load_targets, mark_sent, sidecar_path,
                        update_workbook, write_new_workbook)
 from .llm import LLMEvaluator, confirm_gate, list_models
 from .mailer import Mailer
@@ -198,7 +198,7 @@ def cmd_run(args) -> int:
         return 2
 
     def llm_progress(i, total, p):
-        status = f"{p.probability:>3}%" if p.probability else "----"
+        status = f"{p.probability:>3}%" if p.llm_status.startswith("ok") else "----"
         print(_safe(f"  [{i}/{total}] {status}  {p.name[:34]:<34} {p.llm_status[:28]}"))
 
     evaluator.evaluate_all(selected, progress=llm_progress,
@@ -219,7 +219,8 @@ def cmd_run(args) -> int:
         if not args.no_backup:
             print(" Timestamped backup saved alongside the original.")
 
-    ranked = sorted([p for p in selected if p.probability], key=lambda p: -p.probability)
+    ranked = sorted([p for p in selected if p.probability and p.llm_status.startswith("ok")],
+                    key=lambda p: -p.probability)
     if ranked:
         print("\n Top matches:")
         for p in ranked[:10]:
@@ -379,6 +380,41 @@ def _verify_rows(professors, args_workers=None, repair=True, apply=True,
     return counts
 
 
+_DONE_STATUSES = {"sent", "review-sent"}
+
+
+def _drop_sent(path: Path, professors):
+    """Leave rows that were already mailed exactly as they are."""
+    from openpyxl import load_workbook
+    wb = load_workbook(path, read_only=True, data_only=True)
+    done = set()
+    for ws in wb.worksheets:
+        hdr = _find_header_row(ws)
+        col = _column_index(ws, hdr).get("send status")
+        if not col:
+            continue
+        for r, row in enumerate(ws.iter_rows(min_row=hdr + 1, values_only=True), hdr + 1):
+            val = row[col - 1] if col - 1 < len(row) else None
+            if str(val or "").strip().lower() in _DONE_STATUSES:
+                done.add((ws.title, r))
+    wb.close()
+    # Sends recorded while the workbook was locked live in the sidecar until
+    # the next successful write; they are just as done.
+    side = sidecar_path(path)
+    if side.exists():
+        try:
+            for item in json.loads(side.read_text(encoding="utf-8")):
+                if str(item.get("status", "")).strip().lower() in _DONE_STATUSES:
+                    done.add((item.get("sheet"), item.get("row")))
+        except (OSError, ValueError, AttributeError):
+            pass
+    keep = [p for p in professors if (p.source_sheet, p.source_row) not in done]
+    skipped = len(professors) - len(keep)
+    if skipped:
+        print(f" Skipping {skipped} row(s) already sent - they are left untouched.")
+    return keep
+
+
 def cmd_discover(args) -> int:
     """Build a target list of N professors in K resumable batches."""
     settings.ensure_dirs()
@@ -408,6 +444,14 @@ def cmd_discover(args) -> int:
     if args.fresh:
         state_path.unlink(missing_ok=True)
     existing = load_targets(out_path) if out_path.exists() else []
+    excluded = []
+    for ex in args.exclude or []:
+        if Path(ex).exists():
+            excluded += load_targets(ex)
+        else:
+            print(_safe(f" WARNING: --exclude {ex} not found; nobody excluded from it."))
+    if excluded:
+        print(f" Excluding {len(excluded)} professors listed in --exclude workbooks.")
     if existing and not is_writable(out_path):
         print(_safe(f" ERROR: {out_path.name} is open in Excel. Close it and re-run."))
         return 1
@@ -430,11 +474,12 @@ def cmd_discover(args) -> int:
               f"senior researchers so far: {found}/{spec.quota}")
 
     totals = {"found": 0}
+    rows_now = [len(existing)]
     for profs, res in run_batches(
             queries, count=count, batches=n_batches, countries=countries,
             since_year=since, min_h_index=args.min_h_index,
             min_works=args.min_works, max_pages_per_batch=max_pages,
-            existing=existing, state_path=state_path,
+            existing=existing + excluded, state_path=state_path,
             mailto=settings.openalex_mailto, api_key=settings.openalex_api_key,
             cache_path=settings.output_dir / "discover_cache.json",
             on_batch_start=on_start, on_page=on_page):
@@ -452,12 +497,13 @@ def cmd_discover(args) -> int:
                              label=f"b{res.index} ")
             print(f" Emails: ok={c.get('ok', 0)} suspect={c.get('suspect', 0)} "
                   f"not found={c.get('invalid', 0)}")
-        append_rows(out_path, profs)
+        if not _save_batch(out_path, profs):
+            return 1
         totals["found"] += len(profs)
-        print(_safe(f" Saved -> {out_path.name} "
-                    f"({len(existing) + totals['found']} rows total)"))
+        rows_now[0] = len(load_targets(out_path))
+        print(_safe(f" Saved -> {out_path.name} ({rows_now[0]} rows total)"))
 
-    final = len(existing) + totals["found"]
+    final = rows_now[0]
     _h("DISCOVERY DONE")
     print(f" {totals['found']} new professors this run; {final} in {out_path.name}.")
     if final < count:
@@ -470,6 +516,34 @@ def cmd_discover(args) -> int:
     return 0
 
 
+def _save_batch(out_path: Path, profs) -> bool:
+    """Append one batch, waiting out an Excel lock instead of losing it.
+
+    The batch is only marked done after this returns, so if the user gives up
+    the rows are also parked in a JSON file and the batch reruns next time.
+    """
+    import time
+    while out_path.exists() and not is_writable(out_path):
+        print(_safe(f" {out_path.name} is open in Excel - close it to save this "
+                    "batch (retrying in 15s, Ctrl+C to stop)."))
+        try:
+            time.sleep(15)
+        except KeyboardInterrupt:
+            break
+    try:
+        append_rows(out_path, profs)
+        return True
+    except (PermissionError, OSError) as exc:
+        dump = out_path.with_suffix(".unsaved.json")
+        dump.write_text(json.dumps([p.to_dict() if hasattr(p, "to_dict") else vars(p)
+                                    for p in profs], indent=1, default=str),
+                        encoding="utf-8")
+        print(_safe(f" ERROR: could not write {out_path.name} ({exc}). "
+                    f"This batch was parked in {dump.name} and will be re-run "
+                    "next time - re-run the same command once the file is closed."))
+        return False
+
+
 def cmd_recheck(args) -> int:
     """Re-verify every professor (still active, still there) and every email."""
     settings.ensure_dirs()
@@ -477,6 +551,8 @@ def cmd_recheck(args) -> int:
     _h("RECHECK PROFESSORS AND EMAILS")
     professors = load_targets(path, sheet=args.sheet)
     print(f" {len(professors)} rows in {path.name}")
+    if not args.include_sent:
+        professors = _drop_sent(path, professors)
 
     if not args.emails_only:
         print("\n Professors: still publishing, still at the listed institution?")
@@ -538,10 +614,17 @@ def cmd_verify(args) -> int:
     path = settings.require_target_xlsx(args.xlsx)
     _h("EMAIL VERIFICATION")
     professors = load_targets(path, sheet=args.sheet)
+    if not args.include_sent:
+        professors = _drop_sent(path, professors)
     if args.top:
+        # Rank like `send` does: by the tool's Probability of Acceptance,
+        # falling back to a hand-typed Probability column.
+        scored = {(r["sheet"], r["row"]): r["probability"]
+                  for r in load_for_sending(path, sheet=args.sheet)}
         professors = sorted(
             professors,
-            key=lambda p: -_pct(p.prior_probability))[:args.top]
+            key=lambda p: -max(_pct(p.prior_probability),
+                               scored.get((p.source_sheet, p.source_row), 0)))[:args.top]
     print(f" Checking {len(professors)} addresses from {path.name}")
     print(" Checks: syntax, mail records (MX/A), name match")
     if args.repair:
@@ -694,6 +777,8 @@ def build_parser() -> argparse.ArgumentParser:
     sd.add_argument("--verify-emails", action="store_true",
                     help="Find each person's current email as every batch completes")
     sd.add_argument("--workers", type=int, help="Parallel email lookups (default 4)")
+    sd.add_argument("--exclude", action="append", metavar="XLSX",
+                    help="Skip anyone already in this workbook (repeatable)")
     sd.add_argument("--fresh", action="store_true",
                     help="Forget saved batch progress and start the plan over")
     sd.set_defaults(func=cmd_discover)
@@ -710,6 +795,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Skip the OpenAlex professor check")
     sc.add_argument("--workers", type=int, help="Parallel email lookups (default 4)")
     sc.add_argument("--no-dns", action="store_true", help="Skip MX/A record lookups")
+    sc.add_argument("--include-sent", action="store_true",
+                    help="Also recheck rows already marked sent (skipped by default)")
     sc.add_argument("--dry-run", action="store_true", help="Report only")
     sc.add_argument("--no-backup", action="store_true", help="Do not back up the workbook")
     sc.set_defaults(func=cmd_recheck)
@@ -725,6 +812,8 @@ def build_parser() -> argparse.ArgumentParser:
     sv.add_argument("--probe-smtp", action="store_true",
                     help="Ask the mail server whether the mailbox exists (advisory)")
     sv.add_argument("--no-dns", action="store_true", help="Skip MX/A record lookups")
+    sv.add_argument("--include-sent", action="store_true",
+                    help="Also check rows already marked sent (skipped by default)")
     sv.add_argument("--workers", type=int, help="Parallel lookups (default VERIFY_WORKERS=4)")
     sv.add_argument("--dry-run", action="store_true",
                     help="Report only, do not touch the workbook")

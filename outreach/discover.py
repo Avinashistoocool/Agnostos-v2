@@ -227,6 +227,9 @@ class Discoverer:
 
     # ---------------------------------------------------------- transport
     def _get(self, url: str) -> dict | None:
+        # Describes the most recent request only; a stale error would make a
+        # genuinely finished topic look like a failure for the rest of the run.
+        self.last_error = ""
         wait = self.min_interval - (time.monotonic() - self._last_call)
         if wait > 0:
             time.sleep(wait)
@@ -288,33 +291,6 @@ class Discoverer:
         if inst_types:
             parts.append("authorships.institutions.type:" + "|".join(inst_types))
         return ",".join(parts)
-
-    def search_works(self, query: str, countries: list[str], since_year: int,
-                     pages: int = 6, per_page: int = 100,
-                     inst_types: list[str] | None = None, progress=None):
-        """Yield matching works, newest-relevance first, following a cursor."""
-        flt = self._work_filter(countries, since_year,
-                                inst_types if inst_types is not None else DEFAULT_INST_TYPES)
-        cursor = "*"
-        for page in range(pages):
-            data = self._api("/works", {
-                "search": query,
-                "filter": flt,
-                "per-page": per_page,
-                "cursor": cursor,
-                "select": "id,title,publication_year,authorships,topics,cited_by_count",
-            })
-            if not data or not data.get("results"):
-                break
-            self.pages_read += 1
-            results = data["results"]
-            self.works_seen += len(results)
-            if progress:
-                progress(page + 1, pages, len(results), data.get("meta", {}).get("count", 0))
-            yield from results
-            cursor = (data.get("meta") or {}).get("next_cursor")
-            if not cursor:
-                break
 
     def fetch_page(self, query: str, countries: list[str], since_year: int,
                    cursor: str = "*", per_page: int = 100,
@@ -385,16 +361,6 @@ class Discoverer:
                 if t and t not in cand.topics:
                     cand.topics.append(t)
 
-    def collect(self, query: str, countries: list[str], since_year: int,
-                pages: int = 6, inst_types: list[str] | None = None,
-                progress=None) -> dict[str, Candidate]:
-        """Fold a stream of works into one record per plausible PI."""
-        people: dict[str, Candidate] = {}
-        for work in self.search_works(query, countries, since_year, pages,
-                                      inst_types=inst_types, progress=progress):
-            self.fold(work, people, countries)
-        return people
-
     def hydrate(self, candidates: list[Candidate], progress=None) -> None:
         """Fill in works/citation counts, 50 authors per request.
 
@@ -454,95 +420,4 @@ def to_professor(cand: Candidate, homepage: str = "") -> Professor:
         openalex_id=cand.author_id,
         openalex_concepts=cand.topics[:8],
         prior_probability="",
-        email_status="unknown",
     )
-
-
-def discover(query: str, countries: str = "europe", since_year: int = 2022,
-             limit: int = 200, pages: int = 6, min_h_index: int = 8,
-             min_works: int = 20, mailto: str = "", api_key: str = "",
-             cache_path: str | Path | None = None,
-             inst_types: list[str] | None = None,
-             resolve_domains: bool = True,
-             progress=None, stage=None) -> tuple[list[Professor], dict]:
-    """End-to-end: topic -> ranked, deduplicated, filtered professor list.
-
-    `min_h_index`/`min_works` are the seniority gate. A first-year PhD student
-    is a first author too, and mailing them about an internship wastes both
-    people's time; requiring a publication history is the cheapest available
-    proxy for "runs a group".
-    """
-    codes = resolve_countries(countries)
-    disc = Discoverer(mailto=mailto, api_key=api_key, cache_path=cache_path)
-
-    if stage:
-        stage(f"Searching OpenAlex for '{query}' in {len(codes) or 'all'} countries "
-              f"since {since_year}")
-    people = disc.collect(query, codes, since_year, pages=pages,
-                          inst_types=inst_types, progress=progress)
-    raw_count = len(people)
-
-    # Hydrate only the plausible ones; citation lookups are the expensive part.
-    shortlist = sorted(people.values(), key=lambda c: -c.score)[:max(limit * 3, limit)]
-    if stage:
-        stage(f"Found {raw_count} lead authors; checking seniority of the top "
-              f"{len(shortlist)}")
-    disc.hydrate(shortlist)
-
-    senior = [c for c in shortlist
-              if c.h_index >= min_h_index and c.works_count >= min_works]
-    senior.sort(key=lambda c: -c.score)
-    senior = senior[:limit]
-
-    professors: list[Professor] = []
-    for cand in senior:
-        homepage = ""
-        if resolve_domains:
-            _, homepage = disc.ror_domains(cand.ror)
-        professors.append(to_professor(cand, homepage))
-    disc.save_cache()
-
-    stats = {
-        "query": query,
-        "countries": codes,
-        "works_seen": disc.works_seen,
-        "pages_read": disc.pages_read,
-        "lead_authors": raw_count,
-        "after_seniority": len(senior),
-        "returned": len(professors),
-        "error": disc.last_error,
-    }
-    return professors, stats
-
-
-def merge_professors(existing: list[Professor],
-                     new: list[Professor]) -> tuple[list[Professor], int]:
-    """Append only people not already on the list.
-
-    Matching is on OpenAlex id, then email, then name+institution, so running
-    `discover` again next month tops the list up instead of duplicating it.
-    """
-    def keys(p: Professor) -> set[str]:
-        out = set()
-        if p.openalex_id:
-            out.add("oa:" + p.openalex_id.lower())
-        if p.email:
-            out.add("em:" + p.email.strip().lower())
-        if p.name:
-            out.add("nm:" + re.sub(r"\W+", "", p.name.lower()) + "|"
-                    + re.sub(r"\W+", "", (p.institution or "").lower()))
-        return out
-
-    known: set[str] = set()
-    for p in existing:
-        known |= keys(p)
-    merged = list(existing)
-    added = 0
-    for p in new:
-        k = keys(p)
-        if k & known:
-            continue
-        known |= k
-        merged.append(p)
-        added += 1
-    return merged, added

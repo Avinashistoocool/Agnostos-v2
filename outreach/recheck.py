@@ -27,7 +27,7 @@ _STOP = {"university", "universitat", "universite", "universita", "universidad",
          "institute", "institut", "instituto", "istituto", "college", "school",
          "of", "the", "and", "for", "de", "di", "der", "des", "la", "le", "fur",
          "national", "technical", "technology", "sciences", "science", "research",
-         "center", "centre", "zentrum", "and", "di", "degli", "studi"}
+         "center", "centre", "zentrum", "degli", "studi"}
 
 
 def _tokens(text: str) -> set[str]:
@@ -83,7 +83,9 @@ def _author_record(client: OpenAlexClient, prof: Professor) -> dict | None:
         if data:
             client.cache[key] = data
         return data
-    return client.find_author(prof)
+    # A namesake at another university would be reported as "moved"; only
+    # accept a record whose affiliations match the row.
+    return client.find_author(prof, strict=bool(prof.institution))
 
 
 def _aliases(client: OpenAlexClient, inst: dict) -> list[str]:
@@ -110,6 +112,8 @@ def recheck_professor(client: OpenAlexClient, prof: Professor,
     if not author:
         if client.last_error:
             return "", f"could not check: {client.last_error}"
+        if prof.institution:
+            return NOT_FOUND, "no OpenAlex author record matching this name and institution"
         return NOT_FOUND, "no OpenAlex author record for this name"
     if not prof.openalex_id and author.get("id"):
         prof.openalex_id = author["id"]
@@ -149,8 +153,14 @@ def recheck_all(professors: list[Professor], client: OpenAlexClient,
                 on_result=None) -> dict[str, int]:
     counts = {ACTIVE: 0, MOVED: 0, INACTIVE: 0, NOT_FOUND: 0, "": 0}
     for i, prof in enumerate(professors):
+        if client.rate_limited:
+            # Every further lookup would fail the same way; keep prior statuses.
+            counts[""] += len(professors) - i
+            break
         status, note = recheck_professor(client, prof)
-        prof.profile_status = f"{status}: {note}" if status else note
+        if status:
+            # A failed lookup says nothing about the person; keep the last result.
+            prof.profile_status = f"{status}: {note}"
         counts[status] = counts.get(status, 0) + 1
         if on_result:
             on_result(i, prof, status, note)
