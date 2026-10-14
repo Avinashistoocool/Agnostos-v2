@@ -425,6 +425,16 @@ def main() -> int:
     from outreach.verify import EmailFinder as _EF
     assert _EF._emails_in("mail nicola.serra@SPAMNOT.cern.ch here") == \
         ["nicola.serra@cern.ch"]
+    # Obfuscated addresses common on university pages are decoded.
+    from outreach.verify import _typo3_decrypt
+    uhh = ('<span class="n">gregor.kasieczka</span><span class="a">&quot;&#65;&#84;&quot;'
+           '</span><span class="d">uni-hamburg.de</span></a></span></div><h2>Publikationen')
+    assert _EF._emails_in(uhh) == ["gregor.kasieczka@uni-hamburg.de"]
+    assert _EF._emails_in("jane.doe [at] uni-x [dot] de.") == ["jane.doe@uni-x.de"]
+    t3 = _typo3_decrypt("mailto:jane.doe@uni-x.de", 3)
+    assert _EF._emails_in(f"<a href=\"javascript:linkTo_UnCryptMailto('{t3}');\">") == \
+        ["jane.doe@uni-x.de"]
+    assert _EF._emails_in("I work at home. Email me at work") == []
     print("    ok: right person required, stale domains flagged, junk rejected")
 
     print("[12a] invalid rows are skipped by the mailer")

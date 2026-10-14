@@ -27,6 +27,7 @@ recipient or blacklist probers, so it is advisory only.
 from __future__ import annotations
 
 import contextlib
+import html as htmllib
 import json
 import os
 import re
@@ -113,6 +114,63 @@ FIND_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 OBFUSCATED_RE = re.compile(
     r"([A-Za-z0-9._%+\-]+)\s*(?:\[at\]|\(at\)|&#64;|\sat\s)\s*"
     r"([A-Za-z0-9.\-]+)\s*(?:\[dot\]|\(dot\)|\sdot\s)\s*([A-Za-z]{2,})", re.I)
+# `name "AT" uni-x.de`, `name [at] uni-x.de`, `name (at) uni-x (dot) de`, run
+# on the page's visible text, where markup has already been stripped out.
+AT_TEXT_RE = re.compile(
+    r"([A-Za-z0-9._%+\-]+)\s*"
+    r"(?:[\"'\[\(\{<]\s*(?:at|@)\s*[\"'\]\)\}>]|\s(?:at|AT)\s)\s*"
+    r"([A-Za-z0-9\-]+(?:(?:\.|\s*(?:\[dot\]|\(dot\)|\{dot\})\s*|\s+dot\s+)[A-Za-z0-9\-]+)+)", re.I)
+_DOT_TOKEN_RE = re.compile(r"\s*(?:\[dot\]|\(dot\)|\{dot\})\s*|\s+dot\s+", re.I)
+
+
+def _page_text(html: str) -> str:
+    """Visible text with tags removed and entities decoded."""
+    text = re.sub(r"(?is)<(script|style)\b.*?</\1>", " ", html or "")
+    text = re.sub(r"<[^>]+>", " ", text)
+    return htmllib.unescape(text)
+
+
+def _typo3_decrypt(enc: str, offset: int) -> str:
+    out = []
+    for ch in enc:
+        n = ord(ch)
+        for lo, hi in ((0x2B, 0x3A), (0x40, 0x5A), (0x61, 0x7A)):
+            if lo <= n <= hi:
+                n += offset
+                if n > hi:
+                    n = lo + (n - hi - 1)
+                elif n < lo:
+                    n = hi - (lo - n - 1)
+                break
+        out.append(chr(n))
+    return "".join(out)
+
+
+def _typo3_emails(html: str) -> list[str]:
+    """TYPO3 (common on German/Austrian/Swiss university sites) ships mailto
+    links Caesar-shifted and decodes them in JavaScript on click."""
+    tokens = re.findall(r"linkTo_UnCryptMailto\(\s*['\"]([^'\"]+)['\"]", html or "")
+    tokens += re.findall(r"data-mailto-token=['\"]([^'\"]+)['\"]", html or "")
+    out = []
+    for tok in tokens:
+        tok = htmllib.unescape(tok)
+        for off in range(-15, 16):
+            dec = _typo3_decrypt(tok, off)
+            if dec.lower().startswith("mailto:"):
+                out.append(urllib.parse.unquote(dec[7:]).split("?")[0])
+                break
+    return out
+
+
+def _cloudflare_emails(html: str) -> list[str]:
+    out = []
+    for hexstr in re.findall(r"data-cfemail=['\"]([0-9a-fA-F]+)['\"]", html or ""):
+        try:
+            data = bytes.fromhex(hexstr)
+            out.append(bytes(b ^ data[0] for b in data[1:]).decode("utf-8"))
+        except (ValueError, IndexError, UnicodeDecodeError):
+            continue
+    return out
 
 # Mailbox names that belong to an office, not a person.
 GENERIC_LOCALPARTS = {
@@ -530,6 +588,13 @@ class EmailFinder:
             cand = urllib.parse.unquote(raw).strip().strip(".,;:")
             if EMAIL_RE.match(cand):
                 found.add(cand)
+        for cand in _typo3_emails(html) + _cloudflare_emails(html):
+            if EMAIL_RE.match(cand.strip()):
+                found.add(cand.strip())
+        for user, dom in AT_TEXT_RE.findall(_page_text(html)):
+            cand = f"{user.strip('.')}@{_DOT_TOKEN_RE.sub('.', dom).strip('.')}"
+            if EMAIL_RE.match(cand):
+                found.add(cand)
         out = []
         for email in found:
             email = cls._unobfuscate(email)
@@ -720,6 +785,9 @@ def verify_professor(prof: Professor, finder: EmailFinder | None = None,
     known = (domain_of(found),) if found else ()
     res = check_email(prof.name, prof.email, prof.institution, known,
                       check_dns=check_dns, probe=probe, mail_from=mail_from)
+    if repair and finder and not found and not (prof.email or "").strip():
+        res.reasons = ["no address on this row, and none published on the pages searched"
+                       + (f" ({finder.search_error[:60]})" if finder.search_error else "")]
     if found and score >= 1.75:
         if not (prof.email or "").strip():
             # Rows from `discover` arrive with no address at all; the found
