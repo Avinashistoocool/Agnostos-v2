@@ -98,7 +98,8 @@ python -m outreach.cli run --mode scrape --sources sources.yaml
 | `--budget USD` | Hard spend cap for the run |
 | `--provider groq\|openai` | LLM provider (default: `LLM_PROVIDER` from `.env`) |
 | `--model NAME` | Override the drafting model |
-| `--no-enrich` | Skip OpenAlex publication lookups |
+| `--no-enrich` | Skip OpenAlex publication lookups (same as `--skip enrich`) |
+| `--skip STEPS` | Skip optional steps, comma-separated: `enrich` (OpenAlex), `filter` (local score threshold; rows still need an email and the `--max-professors` cap applies), `gate` (same as `--yes`). e.g. `--skip enrich,filter` |
 | `--no-profile-hop` | Mode A: don't open individual profile pages for emails |
 | `--no-backup` | Don't back up the workbook before editing |
 | `--yes` | Skip the `[Y/N]` cost gate (for scripting) |

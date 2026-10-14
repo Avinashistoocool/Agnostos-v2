@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
@@ -107,7 +108,38 @@ def cmd_profile(args) -> int:
     return 0
 
 
+SKIPPABLE = ("enrich", "filter", "gate")
+
+
+def _parse_skip(values: list[str]) -> set[str]:
+    steps = {s.strip().lower() for v in values for s in v.split(",") if s.strip()}
+    bad = steps - set(SKIPPABLE)
+    if bad:
+        raise SystemExit(f"--skip: unknown step(s) {', '.join(sorted(bad))}; "
+                         f"choose from {', '.join(SKIPPABLE)}")
+    return steps
+
+
+def _select_without_filter(professors, max_count: int):
+    selected, rejected = [], []
+    for p in professors:
+        if not p.email:
+            p.llm_status = "skipped: no email"
+        elif len(selected) >= max_count:
+            p.llm_status = "skipped: over max-professors cap"
+        else:
+            selected.append(p)
+            continue
+        rejected.append(p)
+    return selected, rejected
+
+
 def cmd_run(args) -> int:
+    skip = _parse_skip(args.skip)
+    if args.no_enrich:
+        skip.add("enrich")
+    if "gate" in skip:
+        args.yes = True
     settings.ensure_dirs()
     if args.provider:
         settings.provider = args.provider
@@ -150,8 +182,8 @@ def cmd_run(args) -> int:
         return 1
 
     _h("STEP 3/6  OPENALEX ENRICHMENT")
-    if args.no_enrich or not settings.use_openalex:
-        print(" Skipped (--no-enrich).")
+    if "enrich" in skip or not settings.use_openalex:
+        print(" Skipped.")
     else:
         client = OpenAlexClient(
             mailto=settings.openalex_mailto or profile.email,
@@ -172,19 +204,36 @@ def cmd_run(args) -> int:
             print("   Continuing with directory/sheet text only.")
 
     _h("STEP 4/6  LOCAL NLP FILTER (zero tokens)")
-    selected, rejected = filter_candidates(
-        professors, profile,
-        min_score=args.min_score if args.min_score is not None else settings.min_local_score,
-        max_count=settings.max_professors,
-    )
+    min_score = args.min_score if args.min_score is not None else settings.min_local_score
+    if "filter" in skip:
+        print(" Skipped: every row with an email goes to the LLM, in sheet order.")
+        selected, rejected = _select_without_filter(professors, settings.max_professors)
+    else:
+        selected, rejected = filter_candidates(
+            professors, profile, min_score=min_score, max_count=settings.max_professors,
+        )
     print(f" {len(selected)} selected / {len(rejected)} filtered out "
-          f"(threshold {settings.min_local_score}, cap {settings.max_professors})")
+          f"(threshold {min_score}, cap {settings.max_professors})")
+    reasons = Counter(
+        "low local score" if p.llm_status.startswith("skipped: local score")
+        else p.llm_status.removeprefix("skipped: ")
+        for p in rejected
+    )
+    for reason, n in reasons.most_common():
+        print(_safe(f"   {n:>5} x {reason}"))
     for p in selected[:12]:
         print(_safe(f"   {p.local_score:>6.3f}  {p.name[:30]:<30} {p.research_area[:36]}"))
     if len(selected) > 12:
         print(f"   ... and {len(selected) - 12} more")
     if not selected:
-        print(" Nothing passed the filter. Lower --min-score and retry.")
+        if reasons.get("no email", 0) == len(rejected):
+            print(" Nothing passed: no row has an email address yet. Fill them first:")
+            print(f"   python -m outreach.cli verify --xlsx \"{args.xlsx or settings.target_xlsx}\" "
+                  f"--repair --apply")
+        elif reasons.get("low local score"):
+            print(" Nothing passed the filter. Lower --min-score and retry.")
+        else:
+            print(" Nothing passed the filter (see reasons above).")
         return 1
 
     _h("STEP 5/6  LLM EVALUATION + DRAFTING")
@@ -719,6 +768,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="LLM provider (default: LLM_PROVIDER from .env)")
     sr.add_argument("--model", help="Override the drafting model")
     sr.add_argument("--no-enrich", action="store_true", help="Skip OpenAlex lookups")
+    sr.add_argument("--skip", action="append", default=[], metavar="STEP",
+                    help="Skip optional steps (comma-separated or repeated): "
+                         f"{', '.join(SKIPPABLE)}. e.g. --skip enrich,filter")
     sr.add_argument("--no-profile-hop", action="store_true",
                     help="Mode A: do not visit individual profile pages for emails")
     sr.add_argument("--no-backup", action="store_true", help="Do not back up the workbook")
