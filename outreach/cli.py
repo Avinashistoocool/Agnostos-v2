@@ -1,8 +1,11 @@
 """CLI entrypoint for the academic outreach pipeline.
 
   python -m outreach.cli profile
+  python -m outreach.cli discover --count 1000 --batches 4 --query "topic a; topic b"
+  python -m outreach.cli recheck --xlsx targets.xlsx --apply
   python -m outreach.cli run  --mode list   [--yes] [--no-enrich] [--max-professors N]
   python -m outreach.cli run  --mode scrape --sources sources.yaml
+  python -m outreach.cli verify --repair
   python -m outreach.cli send --dry-run
   python -m outreach.cli send --live
 """
@@ -15,13 +18,18 @@ from datetime import datetime
 from pathlib import Path
 
 from .config import MODEL_PRICES, PROVIDERS, ConfigError, settings
+from .batches import plan_batches, run_batches, split_queries
+from .discover import COUNTRY_GROUPS
 from .enrich import OpenAlexClient
-from .excel_io import (is_writable, load_for_sending, load_targets, mark_sent,
+from .excel_io import (_column_index, _find_header_row, append_rows, is_writable,
+                       load_for_sending, load_targets, mark_sent,
                        update_workbook, write_new_workbook)
 from .llm import LLMEvaluator, confirm_gate, list_models
 from .mailer import Mailer
 from .matcher import filter_candidates
 from .resume_parser import parse_resume, save_profile
+from .recheck import recheck_all
+from .verify import load_cache, save_cache, verify_many
 
 BAR = "=" * 62
 
@@ -312,7 +320,8 @@ def cmd_send(args) -> int:
 
     with Mailer(settings, profile, dry_run=dry_run, redirect_to=review_to) as mailer:
         updates = mailer.send_batch(rows, progress=progress, resend=args.resend,
-                                    top=args.top)
+                                    top=args.top,
+                                    allow_unverified=args.allow_unverified)
 
     deferred = mark_sent(path, updates)
     sent = sum(1 for u in updates if u["status"] == "sent")
@@ -340,7 +349,237 @@ def cmd_send(args) -> int:
     return 0
 
 
+def _verify_rows(professors, args_workers=None, repair=True, apply=True,
+                 dns=True, probe=False, label=""):
+    """Shared by verify/discover/recheck: parallel email check with progress."""
+    cache_path = settings.output_dir / "email_lookup_cache.json"
+    cache = load_cache(cache_path) if repair else {}
+    workers = args_workers or settings.verify_workers
+    done = [0]
+    total = len(professors)
+
+    def on_result(i, prof, res):
+        done[0] += 1
+        flag = {"ok": "ok", "suspect": "SUSPECT", "invalid": "INVALID"}.get(
+            res.status, "?")
+        print(_safe(f"  {label}[{done[0]}/{total}] {flag:<8} {res.confidence:>3}%  "
+                    f"{prof.name[:28]:<28} {prof.email[:38]}"))
+        if res.status != "ok":
+            print(_safe(f"            {res.summary()[:100]}"))
+        if res.suggestion and not apply:
+            print(_safe(f"            -> suggested: {res.suggestion}  [{res.source}]"))
+        if repair and done[0] % 25 == 0:
+            save_cache(cache_path, cache)   # survive an interrupted run
+
+    counts = verify_many(professors, workers=workers, check_dns=dns, probe=probe,
+                         mail_from=settings.smtp_from, repair=repair, cache=cache,
+                         apply=apply, on_result=on_result)
+    if repair:
+        save_cache(cache_path, cache)
+    return counts
+
+
+def cmd_discover(args) -> int:
+    """Build a target list of N professors in K resumable batches."""
+    settings.ensure_dirs()
+    _h("DISCOVER TARGETS")
+
+    queries = split_queries(args.query or settings.discover_queries)
+    if not queries:
+        # Default to what the resume says you actually work on; that is the
+        # whole point of having parsed it. One interest per batch.
+        profile = parse_resume(settings.require_resume(args.resume))
+        queries = [q for q in profile.research_interests if len(q) > 3][:8] \
+            or [" ".join(profile.keywords[:8])]
+        print(_safe(" No --query given; using your resume interests:\n   "
+                    + "; ".join(queries)))
+    if not any(q.strip() for q in queries):
+        print(" Nothing to search for. Pass --query \"topic one; topic two\".")
+        return 1
+
+    count = args.count or settings.discover_count
+    n_batches = args.batches or settings.discover_batches
+    countries = args.countries or settings.discover_countries
+    since = args.since or settings.discover_since
+    max_pages = args.max_pages or settings.discover_max_pages
+
+    out_path = Path(args.output) if args.output else settings.output_dir / "professors.xlsx"
+    state_path = out_path.with_suffix(".batches.json")
+    if args.fresh:
+        state_path.unlink(missing_ok=True)
+    existing = load_targets(out_path) if out_path.exists() else []
+    if existing and not is_writable(out_path):
+        print(_safe(f" ERROR: {out_path.name} is open in Excel. Close it and re-run."))
+        return 1
+
+    plan = plan_batches(queries, count, n_batches)
+    print(f" Target: {count} professors in {n_batches} batch(es) -> {out_path}")
+    print(f" Region: {countries}   papers since {since}   seniority: "
+          f"h-index>={args.min_h_index}, works>={args.min_works}")
+    for spec in plan:
+        print(_safe(f"   batch {spec.index}: {spec.quota:>4} x '{spec.query}'"))
+    if existing:
+        print(f" {len(existing)} professors already in {out_path.name}; "
+              "they will not be added again.")
+
+    def on_start(spec):
+        _h(f"BATCH {spec.index}/{n_batches}: {spec.query}  (quota {spec.quota})")
+
+    def on_page(spec, page, n, total, found):
+        print(f"  page {page:>2}  +{n} papers  (topic has {total:,})  "
+              f"senior researchers so far: {found}/{spec.quota}")
+
+    totals = {"found": 0}
+    for profs, res in run_batches(
+            queries, count=count, batches=n_batches, countries=countries,
+            since_year=since, min_h_index=args.min_h_index,
+            min_works=args.min_works, max_pages_per_batch=max_pages,
+            existing=existing, state_path=state_path,
+            mailto=settings.openalex_mailto, api_key=settings.openalex_api_key,
+            cache_path=settings.output_dir / "discover_cache.json",
+            on_batch_start=on_start, on_page=on_page):
+        if res.error:
+            print(f" ! {res.error}")
+        why = ("topic exhausted" if res.exhausted
+               else "page cap reached" if res.found < res.quota else "quota met")
+        print(f" Batch {res.index}: {res.found}/{res.quota} new professors "
+              f"from {res.works} papers ({why})")
+        if not profs:
+            continue
+        if args.verify_emails:
+            print(f" Finding current email addresses for {len(profs)} people...")
+            c = _verify_rows(profs, args.workers, repair=True, apply=True,
+                             label=f"b{res.index} ")
+            print(f" Emails: ok={c.get('ok', 0)} suspect={c.get('suspect', 0)} "
+                  f"not found={c.get('invalid', 0)}")
+        append_rows(out_path, profs)
+        totals["found"] += len(profs)
+        print(_safe(f" Saved -> {out_path.name} "
+                    f"({len(existing) + totals['found']} rows total)"))
+
+    final = len(existing) + totals["found"]
+    _h("DISCOVERY DONE")
+    print(f" {totals['found']} new professors this run; {final} in {out_path.name}.")
+    if final < count:
+        print(f" Short of {count}: widen --countries, lower --min-h-index, use an "
+              "earlier --since, or add more topics to --query.")
+    print("\n Next:")
+    if not args.verify_emails:
+        print(f"   python -m outreach.cli verify --xlsx \"{out_path}\" --repair --apply")
+    print(f"   python -m outreach.cli run --mode list --xlsx \"{out_path}\"")
+    return 0
+
+
+def cmd_recheck(args) -> int:
+    """Re-verify every professor (still active, still there) and every email."""
+    settings.ensure_dirs()
+    path = settings.require_target_xlsx(args.xlsx)
+    _h("RECHECK PROFESSORS AND EMAILS")
+    professors = load_targets(path, sheet=args.sheet)
+    print(f" {len(professors)} rows in {path.name}")
+
+    if not args.emails_only:
+        print("\n Professors: still publishing, still at the listed institution?")
+        client = OpenAlexClient(mailto=settings.openalex_mailto,
+                                api_key=settings.openalex_api_key,
+                                cache_path=settings.output_dir / "openalex_cache.json")
+
+        def on_prof(i, prof, status, note):
+            print(_safe(f"  [{i + 1}/{len(professors)}] {status or '?':<9} "
+                        f"{prof.name[:28]:<28} {note[:70]}"))
+
+        pc = recheck_all(professors, client, on_result=on_prof)
+        print(f" active={pc.get('active', 0)} moved={pc.get('moved', 0)} "
+              f"inactive={pc.get('inactive', 0)} not-found={pc.get('not found', 0)}")
+
+    if not args.professors_only:
+        print("\n Emails: looking up each person's current published address")
+        ec = _verify_rows(professors, args.workers, repair=True, apply=args.apply,
+                          dns=not args.no_dns)
+        print(f" ok={ec.get('ok', 0)} suspect={ec.get('suspect', 0)} "
+              f"invalid={ec.get('invalid', 0)}")
+
+    if args.dry_run:
+        print(" Dry run: nothing written.")
+        return 0
+    if not is_writable(path):
+        print(_safe(f" ERROR: {path.name} is open in Excel. Close it and re-run."))
+        return 1
+    if args.apply:
+        _write_emails(path, professors)
+    update_workbook(path, professors, make_backup=not args.no_backup)
+    print(f" Wrote Profile Status and Email Status columns -> {path.name}")
+    if not args.apply:
+        print(" Re-run with --apply to replace addresses with the suggested ones.")
+    return 0
+
+
+def _write_emails(path: Path, professors) -> None:
+    """Write adopted addresses into the Email column itself."""
+    from openpyxl import load_workbook
+    wb = load_workbook(path)
+    for p in professors:
+        if not (p.source_sheet and p.source_row and p.email):
+            continue
+        ws = wb[p.source_sheet]
+        hdr = _find_header_row(ws)
+        cols = _column_index(ws, hdr)
+        col = next((cols[h] for h in ("email address", "email", "contact email")
+                    if h in cols), None)
+        if col:
+            ws.cell(row=p.source_row, column=col, value=p.email)
+    wb.save(path)
+
+
 # ---------------------------------------------------------------- parser
+def cmd_verify(args) -> int:
+    """Check every address, and optionally hunt down the correct one."""
+    settings.ensure_dirs()
+    path = settings.require_target_xlsx(args.xlsx)
+    _h("EMAIL VERIFICATION")
+    professors = load_targets(path, sheet=args.sheet)
+    if args.top:
+        professors = sorted(
+            professors,
+            key=lambda p: -_pct(p.prior_probability))[:args.top]
+    print(f" Checking {len(professors)} addresses from {path.name}")
+    print(" Checks: syntax, mail records (MX/A), name match")
+    if args.repair:
+        print(" Repair on: reading each professor's own pages for their latest address")
+    if args.probe_smtp:
+        print(" SMTP probe on: advisory only, many servers answer for every mailbox")
+
+    counts = _verify_rows(professors, args.workers, repair=args.repair,
+                          apply=args.apply, dns=not args.no_dns,
+                          probe=args.probe_smtp)
+    print(f"\n ok={counts.get('ok', 0)} suspect={counts.get('suspect', 0)} "
+          f"invalid={counts.get('invalid', 0)}")
+    if args.dry_run:
+        print(" Dry run: nothing written to the workbook.")
+        return 0
+    if not is_writable(path):
+        print(_safe(f" ERROR: {path.name} is open in Excel. Close it and re-run."))
+        return 1
+    if args.apply:
+        _write_emails(path, professors)
+    update_workbook(path, professors, make_backup=not args.no_backup)
+    print(f" Wrote Email Status / Confidence / Notes / Suggested Email -> {path.name}")
+    if counts.get("invalid"):
+        print(" Rows marked invalid are skipped by `send` unless you pass "
+              "--allow-unverified.")
+    if not args.apply and any(p.email_suggestion for p in professors):
+        print(" Review the Suggested Email column, then re-run with --apply to "
+              "adopt the suggestions.")
+    return 0
+
+
+def _pct(value) -> int:
+    try:
+        return int(float(str(value).strip().rstrip("%")))
+    except (TypeError, ValueError):
+        return 0
+
+
 def cmd_models(args) -> int:
     if args.provider:
         settings.provider = args.provider
@@ -362,7 +601,7 @@ def cmd_models(args) -> int:
     if other:
         print(f"\n Non-chat models (speech/moderation), not usable here: "
               f"{', '.join(other)}")
-    print(f"\n Set DRAFT_MODEL in .env, or pass --model to `run`.")
+    print("\n Set DRAFT_MODEL in .env, or pass --model to `run`.")
     return 0
 
 
@@ -425,7 +664,72 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Only send to rows at or above this probability")
     ss.add_argument("--preview", type=int, default=2,
                     help="How many full drafts to print in dry-run")
+    ss.add_argument("--allow-unverified", action="store_true",
+                    help="Send even to rows `verify` marked invalid")
     ss.set_defaults(func=cmd_send)
+
+    sd = sub.add_parser("discover",
+                        help="Find N professors from research topics, in K batches")
+    sd.add_argument("--query", help="Topics separated by ';' - one per batch, reused "
+                                    "round-robin (default: DISCOVER_QUERIES, "
+                                    "then your resume's interests)")
+    sd.add_argument("--resume", help="Path to resume PDF/DOCX (for the default query)")
+    sd.add_argument("--count", type=int,
+                    help="Total professors to find (default DISCOVER_COUNT=1000)")
+    sd.add_argument("--batches", type=int,
+                    help="Split the search into this many batches (default 4)")
+    sd.add_argument("--countries",
+                    help="Region or ISO codes: "
+                         + ", ".join(sorted(COUNTRY_GROUPS)) + ", or e.g. de,ch,gb")
+    sd.add_argument("--since", type=int,
+                    help="Only count papers published from this year on")
+    sd.add_argument("--max-pages", type=int,
+                    help="Cap on pages of 100 papers per batch (default 40)")
+    sd.add_argument("--min-h-index", type=int, default=8,
+                    help="Seniority gate: skip people below this h-index")
+    sd.add_argument("--min-works", type=int, default=20,
+                    help="Seniority gate: skip people with fewer publications")
+    sd.add_argument("--output",
+                    help="Workbook to grow (default output/professors.xlsx)")
+    sd.add_argument("--verify-emails", action="store_true",
+                    help="Find each person's current email as every batch completes")
+    sd.add_argument("--workers", type=int, help="Parallel email lookups (default 4)")
+    sd.add_argument("--fresh", action="store_true",
+                    help="Forget saved batch progress and start the plan over")
+    sd.set_defaults(func=cmd_discover)
+
+    sc = sub.add_parser("recheck",
+                        help="Re-verify every professor (active? moved?) and every email")
+    sc.add_argument("--xlsx", help="Workbook to recheck (default TARGET_XLSX)")
+    sc.add_argument("--sheet", help="Restrict to a single sheet name")
+    sc.add_argument("--apply", action="store_true",
+                    help="Replace addresses with the current ones found online")
+    sc.add_argument("--professors-only", action="store_true",
+                    help="Skip the email lookups")
+    sc.add_argument("--emails-only", action="store_true",
+                    help="Skip the OpenAlex professor check")
+    sc.add_argument("--workers", type=int, help="Parallel email lookups (default 4)")
+    sc.add_argument("--no-dns", action="store_true", help="Skip MX/A record lookups")
+    sc.add_argument("--dry-run", action="store_true", help="Report only")
+    sc.add_argument("--no-backup", action="store_true", help="Do not back up the workbook")
+    sc.set_defaults(func=cmd_recheck)
+
+    sv = sub.add_parser("verify", help="Check (and optionally repair) email addresses")
+    sv.add_argument("--xlsx", help="Workbook containing the targets")
+    sv.add_argument("--sheet", help="Restrict to a single sheet name")
+    sv.add_argument("--top", type=int, help="Only check the N highest-probability rows")
+    sv.add_argument("--repair", action="store_true",
+                    help="Search profile pages and the web for the correct address")
+    sv.add_argument("--apply", action="store_true",
+                    help="Overwrite the Email column with the suggested address")
+    sv.add_argument("--probe-smtp", action="store_true",
+                    help="Ask the mail server whether the mailbox exists (advisory)")
+    sv.add_argument("--no-dns", action="store_true", help="Skip MX/A record lookups")
+    sv.add_argument("--workers", type=int, help="Parallel lookups (default VERIFY_WORKERS=4)")
+    sv.add_argument("--dry-run", action="store_true",
+                    help="Report only, do not touch the workbook")
+    sv.add_argument("--no-backup", action="store_true", help="Do not back up the workbook")
+    sv.set_defaults(func=cmd_verify)
     return p
 
 

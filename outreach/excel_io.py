@@ -46,6 +46,7 @@ HEADER_MAP = {
     "url": "profile_url",
     "website": "profile_url",
     "notes": "notes",
+    "openalex id": "openalex_id",
 }
 
 # Columns this tool writes/updates.
@@ -57,6 +58,11 @@ RESULT_COLUMNS = [
     "Custom Email Draft",
     "AI-Tell Score",
     "Review Flags",
+    "Email Status",
+    "Email Confidence",
+    "Email Notes",
+    "Suggested Email",
+    "Profile Status",
     "LLM Status",
     "Send Status",
     "Sent At",
@@ -68,6 +74,7 @@ OUTPUT_COLUMNS = [
     "Rank", "Professor Name", "Email Address", "Institution", "Country",
     "Department", "Research Area", "Profile URL", "Recent Publications",
     "Funding Status", "Eligibility", "Application Route", "Deadline",
+    "OpenAlex ID",
 ] + RESULT_COLUMNS
 
 HEADER_FILL = PatternFill("solid", fgColor="1F3864")
@@ -167,7 +174,8 @@ def _style_sheet(ws, header_row: int, result_cols: dict[str, int]) -> None:
     widths = {"Probability Justification": 55, "Custom Email Draft": 80,
               "Email Subject": 42, "Local Match Score": 14,
               "Probability of Acceptance": 16, "Review Flags": 40,
-              "AI-Tell Score": 12}
+              "Email Status": 12, "Email Confidence": 14, "Email Notes": 45,
+              "Suggested Email": 32, "AI-Tell Score": 12}
     for name, col in result_cols.items():
         ws.column_dimensions[get_column_letter(col)].width = widths.get(name, 16)
 
@@ -220,8 +228,68 @@ def _result_values(p: Professor) -> dict:
         "Custom Email Draft": p.email_body or None,
         "AI-Tell Score": p.ai_score if p.email_body else None,
         "Review Flags": p.ai_flags or None,
+        "Email Status": p.email_status or None,
+        "Email Confidence": f"{p.email_confidence}%" if p.email_status else None,
+        "Email Notes": p.email_notes or None,
+        "Suggested Email": p.email_suggestion or None,
+        "Profile Status": p.profile_status or None,
         "LLM Status": p.llm_status or None,
     }
+
+
+def _output_row(idx: int, p: Professor) -> list:
+    res = _result_values(p)
+    return [
+        idx, p.name, p.email, p.institution, p.country, p.department,
+        p.research_area, p.profile_url, "; ".join(p.recent_works[:4]),
+        p.funding_status, p.eligibility, p.application_route, p.deadline,
+        p.openalex_id,
+        res["Local Match Score"], res["Probability of Acceptance"],
+        res["Probability Justification"], res["Email Subject"],
+        res["Custom Email Draft"], res["AI-Tell Score"], res["Review Flags"],
+        res["Email Status"], res["Email Confidence"], res["Email Notes"],
+        res["Suggested Email"], res["Profile Status"],
+        p.llm_status, "", "", "", "",
+    ]
+
+
+def append_rows(path: str | Path, professors: list[Professor],
+                sheet_name: str = "Targets") -> Path:
+    """Add rows to a workbook this tool wrote, creating it if needed.
+
+    Earlier rows are left untouched, so batch N never rewrites (or loses the
+    verification results of) batches 1..N-1. Columns are matched by header
+    name, so a workbook written by an older version still lines up.
+    """
+    path = Path(path)
+    if not path.exists():
+        return write_new_workbook(path, professors, sheet_name=sheet_name)
+    wb = load_workbook(path)
+    ws = wb[sheet_name] if sheet_name in wb.sheetnames else wb.worksheets[0]
+    header_row = _find_header_row(ws)
+    headers = _column_index(ws, header_row)
+    next_col = ws.max_column + 1
+    for name in OUTPUT_COLUMNS:
+        if name.lower() not in headers:
+            ws.cell(row=header_row, column=next_col, value=name)
+            headers[name.lower()] = next_col
+            next_col += 1
+    last = header_row
+    for r in range(ws.max_row, header_row, -1):
+        if any(ws.cell(row=r, column=c).value not in (None, "")
+               for c in range(1, min(ws.max_column, 4) + 1)):
+            last = r
+            break
+    rank = last - header_row
+    for p in professors:
+        last += 1
+        rank += 1
+        for name, val in zip(OUTPUT_COLUMNS, _output_row(rank, p)):
+            if val not in (None, ""):
+                ws.cell(row=last, column=headers[name.lower()], value=val)
+        p.source_sheet, p.source_row = ws.title, last
+    wb.save(path)
+    return path
 
 
 def write_new_workbook(path: str | Path, professors: list[Professor],
@@ -240,21 +308,13 @@ def write_new_workbook(path: str | Path, professors: list[Professor],
         cell.alignment = Alignment(vertical="center", wrap_text=True)
 
     for idx, p in enumerate(sorted(professors, key=lambda x: (-x.probability, -x.local_score)), 1):
-        res = _result_values(p)
-        ws.append([
-            idx, p.name, p.email, p.institution, p.country, p.department,
-            p.research_area, p.profile_url, "; ".join(p.recent_works[:4]),
-            p.funding_status, p.eligibility, p.application_route, p.deadline,
-            res["Local Match Score"], res["Probability of Acceptance"],
-            res["Probability Justification"], res["Email Subject"],
-            res["Custom Email Draft"], res["AI-Tell Score"], res["Review Flags"],
-            p.llm_status, "", "", "", "",
-        ])
+        ws.append(_output_row(idx, p))
         p.source_sheet, p.source_row = sheet_name, idx + 1
 
     widths = {"Custom Email Draft": 80, "Probability Justification": 55,
               "Research Area": 35, "Recent Publications": 45, "Email Subject": 42,
-              "Review Flags": 40, "AI-Tell Score": 12}
+              "Review Flags": 40, "AI-Tell Score": 12, "Email Notes": 45,
+              "Suggested Email": 32}
     for col, name in enumerate(OUTPUT_COLUMNS, 1):
         ws.column_dimensions[get_column_letter(col)].width = widths.get(name, 18)
     ws.freeze_panes = "B2"
@@ -297,6 +357,8 @@ def load_for_sending(path: str | Path, sheet: str | None = None) -> list[dict]:
                 "body": str(body),
                 "probability": prob,
                 "send_status": str(get("Send Status") or "").strip(),
+                "email_status": str(get("Email Status") or "").strip().lower(),
+                "suggested_email": str(get("Suggested Email") or "").strip(),
             })
     _apply_pending(path, rows)
     return rows

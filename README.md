@@ -35,6 +35,15 @@ python -m outreach.cli send --live --top 10
 
 SMTP is only needed for the last step — you can draft everything without it. Mode A scraping is entirely optional, and `.env.example` is organised so that only its first section is required; everything else has working defaults.
 
+Don't have a list of professors yet? Build one from your research topic instead of collecting names by hand:
+
+```bash
+python -m outreach.cli discover --count 1000 --batches 4 --query "machine learning particle physics; geometric deep learning"
+python -m outreach.cli verify --xlsx output/professors.xlsx --repair --apply
+```
+
+See [`discover`](#discover--build-a-target-list-of-n-professors-in-batches) below.
+
 ### Your target spreadsheet
 
 Any `.xlsx` works. The header row is auto-detected and ~25 common column names are mapped, so you usually need nothing beyond:
@@ -92,6 +101,80 @@ python -m outreach.cli run --mode scrape --sources sources.yaml
 | `--no-backup` | Don't back up the workbook before editing |
 | `--yes` | Skip the `[Y/N]` cost gate (for scripting) |
 
+### `discover` — build a target list of N professors, in batches
+
+```bash
+python -m outreach.cli discover --count 1000 --batches 4 \
+    --query "machine learning particle physics; geometric deep learning; computational high energy physics; physics-informed machine learning"
+python -m outreach.cli discover --count 200 --countries dach,nordics --since 2023
+```
+
+Builds a large, ranked list of professors without you naming a single university. It searches OpenAlex's **paper** index for your topics, keeps only recent papers from academic institutions in the chosen countries, and records the **first and last authors** — the people who lead the work. Papers with more than ~15 authors are discarded: a 2,000-author collaboration paper names everyone and tells you nothing about who works on what.
+
+**How batching works.** `--count` is split evenly over `--batches` (1000 / 4 = 250 each). Each batch takes one topic from `--query` (separate topics with `;`); with fewer topics than batches they are reused, and a reused topic *continues from the page the previous batch reached*, so it finds new people rather than the same ones. A batch keeps reading pages until it has its quota of senior researchers, its topic runs out of relevant papers, or it hits `--max-pages`. Any shortfall is carried to the next batch.
+
+- **Nobody is added twice** — across batches, and against everyone already in the output workbook (by OpenAlex id and by accent/order-insensitive name).
+- **Each batch is saved the moment it finishes**, and progress is kept in `<output>.batches.json`. If the run is interrupted, re-run the same command and it resumes at the first unfinished batch. Changing any option starts a new plan; `--fresh` forces one.
+- **Off-topic results are dropped.** Free-text search matches words, not meaning ("geometric deep learning" also hits papers about tooth geometry). Each topic's own best results define which broad fields it belongs to, and papers from other fields, or far below the top relevance, are ignored. Nothing about subjects is hardcoded.
+
+| Flag | Purpose |
+|---|---|
+| `--count N` | Total professors to find (default `DISCOVER_COUNT`, `1000`) |
+| `--batches K` | Number of batches (default `DISCOVER_BATCHES`, `4`) |
+| `--query "a; b; c"` | Topics, one per batch, reused round-robin (default `DISCOVER_QUERIES`, then your resume's interests) |
+| `--countries` | `europe`, `eu`, `dach`, `nordics`, `uk`, `usa`, `northamerica`, `asia`, `anz`, or ISO codes like `de,ch,gb` |
+| `--since YEAR` | Only count papers from this year on (default `2021`) |
+| `--max-pages N` | Page cap per batch, 100 papers per page (default `40`) |
+| `--min-h-index N` | Seniority gate (default `8`) — filters out first-year PhD students |
+| `--min-works N` | Minimum publication count (default `20`) |
+| `--output PATH` | Workbook to grow (default `output/professors.xlsx`) |
+| `--verify-emails` | Look up each person's current address as each batch finishes (slow; see `verify`) |
+| `--workers N` | Parallel email lookups (default `VERIFY_WORKERS`, `4`) |
+| `--fresh` | Discard saved batch progress |
+
+No API key is needed and nothing is scraped — OpenAlex is a free public index (set `OPENALEX_MAILTO` or `OPENALEX_API_KEY` for a faster, more reliable quota on big runs). Discovered rows carry a name, institution, country, research summary and OpenAlex id, but **no email address**; that is what `verify --repair` is for.
+
+The full flow:
+
+```bash
+python -m outreach.cli discover --count 1000 --batches 4 --query "..."
+python -m outreach.cli verify --xlsx output/professors.xlsx --repair --apply --workers 6
+python -m outreach.cli run --mode list --xlsx output/professors.xlsx
+python -m outreach.cli send --live --top 10
+```
+
+### `recheck` — is everyone still there, and is every address current?
+
+```bash
+python -m outreach.cli recheck --dry-run            # report only
+python -m outreach.cli recheck --apply              # also replace stale addresses
+python -m outreach.cli recheck --professors-only    # fast: OpenAlex only, no web search
+```
+
+For every row it pulls the person's OpenAlex author record and marks them `active`, `moved` (now publishing from a different institution — acronyms like KIT, EPFL or CERN are resolved through OpenAlex, not a table), `inactive` (no papers for 3+ years) or `not found`, in a **Profile Status** column. It then re-runs the `verify --repair` email lookup for every row. `--emails-only`, `--workers`, `--no-dns`, `--sheet` and `--no-backup` work as in `verify`.
+
+### `verify` — check and repair email addresses
+
+```bash
+python -m outreach.cli verify --dry-run                  # report only
+python -m outreach.cli verify --repair --apply           # find and write correct addresses
+```
+
+Every address is checked for syntax, for whether the domain actually accepts mail (MX/A records), and for whether the local part plausibly matches the professor's name. With `--repair` it goes further: it searches the web for that person, opens their own pages, and extracts the address *they* publish. An address is only trusted when the name matches **and** the page that published it belongs to the same domain — the tool never assumes how a given university's domain ought to be spelled, because that assumption is what produces confidently wrong addresses.
+
+| Flag | Purpose |
+|---|---|
+| `--xlsx PATH` / `--sheet NAME` | Which workbook and sheet to check |
+| `--top N` | Only check the N highest-probability rows |
+| `--repair` | Search the web and read profile pages for the real address |
+| `--apply` | Write the suggested address into the Email column |
+| `--probe-smtp` | Ask the mail server whether the mailbox exists (advisory only) |
+| `--no-dns` | Skip MX/A lookups |
+| `--workers N` | Parallel lookups (default `VERIFY_WORKERS`, `4`) |
+| `--dry-run` | Report only, never touch the workbook |
+
+Each row ends up `ok`, `suspect`, or `invalid`, with a confidence percentage and a note saying where the address was seen. Results are cached in `output/email_lookup_cache.json`, so re-running is cheap. Repair is slow — 20–40 seconds per professor, since it is doing real web searches; `--workers` runs several at once (1,000 professors at 4 workers takes roughly 2–3 hours) — so run it once on a freshly discovered list rather than before every send.
+
 ### `send` — dispatch
 
 ```bash
@@ -128,6 +211,8 @@ Rows already marked `sent` are skipped automatically, so an interrupted run is s
 **2. Target acquisition**
 - *Mode B* reads every professor-like sheet in your workbook, auto-detects the header row, maps ~25 header aliases, folds unknown columns into a notes field, and de-duplicates by email.
 - *Mode A* scrapes faculty directories (see below).
+- *`discover`* builds the workbook for you from a research topic, using the OpenAlex paper index rather than any list of universities.
+- *`verify`* then checks, and with `--repair` finds, the addresses those rows should carry.
 
 **3. OpenAlex enrichment** (`enrich.py`) — free API. Resolves each professor to an author ID (disambiguated by institution), pulls their topic concepts, and fetches recent **first/last-author** papers with abstracts, filtering out 3000-author collaboration papers that say nothing about the PI. Results are cached in `output/openalex_cache.json`, so re-runs cost nothing.
 
@@ -234,6 +319,11 @@ Every setting lives in `.env` (see `.env.example`, which is split into a require
 | `HUMANIZE_THRESHOLD` | `10` | AI-tell score that triggers a rewrite |
 | `ATTACHMENTS` | — | Semicolon-separated; CV, transcript |
 | `OPENALEX_API_KEY` | — | Free; avoids the shared per-IP rate limit |
+| `DISCOVER_COUNT` / `DISCOVER_BATCHES` | `1000` / `4` | `discover` headcount and batch split |
+| `DISCOVER_QUERIES` | — | `;`-separated topics (default: resume interests) |
+| `DISCOVER_COUNTRIES` / `DISCOVER_SINCE` | `europe` / `2021` | Region and paper recency |
+| `DISCOVER_MAX_PAGES` | `40` | Page cap per batch |
+| `VERIFY_WORKERS` | `4` | Parallel email lookups |
 | `SEND_DELAY_MIN/MAX` | `90`/`240` | Seconds between emails |
 | `DAILY_SEND_CAP` | `25` | Stay under provider limits |
 | `SEND_MIN_PROBABILITY` | `0` | Standing quality floor |

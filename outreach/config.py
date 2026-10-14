@@ -145,6 +145,15 @@ class Settings:
     openalex_mailto: str = os.getenv("OPENALEX_MAILTO", os.getenv("SMTP_FROM", ""))
     openalex_works: int = _i("OPENALEX_WORKS", 4)
 
+    # --- Batched discovery (`discover --count N --batches K`) ---
+    discover_count: int = _i("DISCOVER_COUNT", 1000)
+    discover_batches: int = _i("DISCOVER_BATCHES", 4)
+    discover_queries: str = os.getenv("DISCOVER_QUERIES", "")
+    discover_countries: str = os.getenv("DISCOVER_COUNTRIES", "europe")
+    discover_since: int = _i("DISCOVER_SINCE", 2021)
+    discover_max_pages: int = _i("DISCOVER_MAX_PAGES", 40)
+    verify_workers: int = _i("VERIFY_WORKERS", 4)
+
     # --- Email ---
     smtp_host: str = os.getenv("SMTP_HOST", "")
     smtp_port: int = _i("SMTP_PORT", 587)

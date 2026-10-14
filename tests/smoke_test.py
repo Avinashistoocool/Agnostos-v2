@@ -383,6 +383,111 @@ def main() -> int:
     assert not _looks_blocked(big)
     print("    ok (no false positive on large pages)")
 
+    print("[12] email verification scoring (no network)")
+    from outreach.verify import (EmailCheck, check_email, is_academic,
+                                 name_match, same_site)
+    # Local parts a university actually assigns.
+    for nm, em in [("Prof. Michael Spannowsky", "michael.spannowsky@kit.edu"),
+                   ("Prof. Max Welling", "m.welling@uva.nl"),
+                   ("Prof. Ivo van Vulpen", "i.vanvulpen@uva.nl"),
+                   ("Dr. Roberto Ruiz de Austri", "rruiz@ific.uv.es"),
+                   ("Prof. Niels Richard Hansen", "Niels.R.Hansen@math.ku.dk")]:
+        assert name_match(nm, em) >= 0.75, (nm, em)
+    # Someone else's mailbox, and a department office, must not pass.
+    assert name_match("Prof. Michael Spannowsky", "gregor.kasieczka@kit.edu") == 0.0
+    assert name_match("Prof. Tilman Plehn", "info@uni-heidelberg.de") == 0.0
+    # Sub-domains belong to their parent; unrelated universities do not.
+    assert same_site("thphys.uni-heidelberg.de", "uni-heidelberg.de")
+    assert same_site("kit.edu", "kit.edu")
+    assert not same_site("kit.edu", "durham.ac.uk")
+    assert not same_site("kit.edu", "")
+    assert is_academic("unige.ch") and not is_academic("gmail.com")
+
+    good = check_email("Prof. Michael Spannowsky", "michael.spannowsky@kit.edu",
+                       "KIT", check_dns=False)
+    assert good.status == "ok" and good.confidence == 100, good
+    wrong_person = check_email("Prof. Michael Spannowsky",
+                               "gregor.kasieczka@kit.edu", "KIT", check_dns=False)
+    assert wrong_person.status == "suspect" and wrong_person.confidence <= 50
+    # A domain that disagrees with the one found on their live page is docked,
+    # but an institution string that merely reads differently never is.
+    assert check_email("Prof. Michael Spannowsky", "michael.spannowsky@kit.edu",
+                       "Durham University", check_dns=False).status == "ok"
+    stale = check_email("Prof. Michael Spannowsky", "michael.spannowsky@kit.edu",
+                        "", ("durham.ac.uk",), check_dns=False)
+    assert stale.confidence < good.confidence, stale
+    assert "durham.ac.uk" in stale.summary(), stale
+    for bad in ("", "not-an-email", "two@@at.com"):
+        assert check_email("Someone", bad, "KIT", check_dns=False).status == "invalid"
+    assert EmailCheck(status="invalid").sendable is False
+    # Addresses published with a harvester trap in the domain are repaired,
+    # not discarded - the person wrote a real address under the label.
+    from outreach.verify import EmailFinder as _EF
+    assert _EF._emails_in("mail nicola.serra@SPAMNOT.cern.ch here") == \
+        ["nicola.serra@cern.ch"]
+    print("    ok: right person required, stale domains flagged, junk rejected")
+
+    print("[12a] invalid rows are skipped by the mailer")
+    rows12 = load_for_sending(src)[:2]
+    for r in rows12:
+        r["send_status"] = ""
+    rows12[0]["email_status"] = "invalid"
+    with Mailer(settings, profile, dry_run=True) as m12:
+        skipped = m12.send_batch(rows12)
+    assert skipped[0]["status"].startswith("skipped: invalid")
+    assert skipped[1]["status"] == "dry-run"
+    with Mailer(settings, profile, dry_run=True) as m12:
+        forced = m12.send_batch(rows12, allow_unverified=True)
+    assert all(u["status"] == "dry-run" for u in forced), forced
+    print("    ok: blocked by default, --allow-unverified overrides")
+
+    print("[13] topic discovery helpers (no network)")
+    from outreach.discover import (Candidate, _best_name, _this_year,
+                                   merge_professors, resolve_countries)
+    from outreach.models import Professor
+    assert resolve_countries("uk") == ["gb"]
+    assert resolve_countries("de,ch") == ["de", "ch"]
+    assert set(resolve_countries("dach")) == {"de", "at", "ch"}
+    assert _best_name(["T. Golling", "TOBIAS GOLLING", "Golling, T.",
+                       "Tobias Golling"]) == "Tobias Golling"
+    assert _best_name(["Tilman Plehn"]) == "Tilman Plehn"
+    assert _best_name(["Dr. Tilman Plehn"]) == "Tilman Plehn"
+    lead = Candidate(author_id="A1", name="A", hits=4, lead_hits=4,
+                     newest_year=_this_year(), h_index=60)
+    bulk = Candidate(author_id="A2", name="B", hits=4, lead_hits=0,
+                     newest_year=0, h_index=0)
+    assert lead.score > bulk.score, (lead.score, bulk.score)
+    kept = [Professor(name="Tilman Plehn", institution="Heidelberg",
+                      openalex_id="A5")]
+    fresh = [Professor(name="Tilman Plehn", institution="Heidelberg",
+                       openalex_id="A5"),
+             Professor(name="Other Person", institution="EPFL",
+                       openalex_id="A6")]
+    merged, added = merge_professors(kept, fresh)
+    assert (len(merged), added) == (2, 1), (len(merged), added)
+    print("    ok: country groups, name repair, lead-author ranking, dedupe")
+
+    print("[14] batch planner, append, recheck helpers (no network)")
+    from outreach.batches import name_key, plan_batches, split_queries
+    from outreach.excel_io import append_rows, load_targets as _load14
+    from outreach.recheck import same_institution
+    assert split_queries("a; b | c\nd") == ["a", "b", "c", "d"]
+    plan = plan_batches(["x", "y"], 1000, 4)
+    assert [b.quota for b in plan] == [250] * 4
+    assert [b.query for b in plan] == ["x", "y", "x", "y"]
+    assert sum(b.quota for b in plan_batches(["x"], 10, 4)) == 10
+    assert name_key("Jürgen Müller") == name_key("Muller, Jurgen")
+    book = TMP / "append.xlsx"
+    append_rows(book, [Professor(name="A One", institution="EPFL",
+                                 email="a@epfl.ch", openalex_id="A1")])
+    append_rows(book, [Professor(name="B Two", institution="ETH",
+                                 email="b@ethz.ch", openalex_id="A2")])
+    rows = _load14(book)
+    assert [r.name for r in rows] == ["A One", "B Two"], [r.name for r in rows]
+    assert same_institution("Heidelberg University", "Universität Heidelberg")
+    assert not same_institution("Heidelberg University", "ETH Zurich")
+    print("    ok: even quotas, round-robin topics, name keys, append, institution match")
+
     shutil.rmtree(TMP)
     print("\nALL SMOKE TESTS PASSED")
     return 0

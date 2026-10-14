@@ -165,7 +165,8 @@ class Mailer:
         return path
 
     def send_batch(self, rows: list[dict], progress=None,
-                   resend: bool = False, top: int | None = None) -> list[dict]:
+                   resend: bool = False, top: int | None = None,
+                   allow_unverified: bool = False) -> list[dict]:
         updates = []
         # A dry run must never block a later real send, so only genuine
         # deliveries count as already-handled.
@@ -182,6 +183,18 @@ class Mailer:
         for i, row in enumerate(pending, 1):
             if self.sent_count >= self.s.daily_send_cap and not self.dry_run:
                 updates.append({**row, "status": "skipped: daily cap reached"})
+                continue
+            if row.get("email_status") == "invalid" and not allow_unverified:
+                # `verify` proved this address is undeliverable; sending anyway
+                # only generates bounces and hurts the sending domain.
+                result = {"status": "skipped: invalid address",
+                          "detail": "run `verify --repair`, or pass --allow-unverified",
+                          "message": None}
+                updates.append({"sheet": row["sheet"], "row": row["row"],
+                                "status": result["status"],
+                                "detail": result["detail"], "sent_at": ""})
+                if progress:
+                    progress(i, len(pending), row, result)
                 continue
             result = self.send_one(row)
             update = {

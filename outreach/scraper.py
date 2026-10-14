@@ -24,6 +24,7 @@ from urllib import robotparser
 
 from .config import Settings
 from .models import Professor
+from .verify import _SSL
 
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 OBFUSCATED_RE = re.compile(
@@ -308,7 +309,7 @@ class StealthScraper:
             "Accept": "text/html,application/xhtml+xml",
         })
         try:
-            with urllib.request.urlopen(req, timeout=25) as resp:
+            with urllib.request.urlopen(req, timeout=25, context=_SSL) as resp:
                 html = resp.read().decode("utf-8", errors="ignore")
             blocked = _looks_blocked(html)
             return ScrapeResult(url, html, _html_to_text(html), blocked)

@@ -5,6 +5,14 @@ python-dotenv>=1.0.0
 openai>=1.50.0
 PyYAML>=6.0
 
+# `verify --repair` email lookup. Works without it, but far less reliably:
+# it falls back to scraping one search engine, which gets blocked quickly.
+ddgs>=9.0.0
+
+# CA bundle for reading university pages. Python on Windows has no CA store
+# of its own, so without this many valid institutional certificates fail.
+certifi>=2024.2.2
+
 # Mode A (faculty-directory scraping) only. Install with:
 #   pip install playwright && python -m playwright install chromium
 # playwright>=1.45.0

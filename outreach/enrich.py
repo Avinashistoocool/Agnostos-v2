@@ -98,7 +98,7 @@ class OpenAlexClient:
         if not name:
             return None
         key = f"author::{name.lower()}::{prof.institution.lower()}"
-        if key in self.cache:
+        if self.cache.get(key):
             return self.cache[key]
         data = self._get("/authors", {"search": name, "per-page": 5})
         best = None
@@ -107,10 +107,11 @@ class OpenAlexClient:
             for cand in data["results"]:
                 affs = " ".join(
                     (a.get("institution") or {}).get("display_name", "")
-                    for a in cand.get("affiliations", [])
+                    for a in (cand.get("affiliations") or [])
                 ).lower()
                 last_known = " ".join(
-                    i.get("display_name", "") for i in cand.get("last_known_institutions", [])
+                    i.get("display_name", "")
+                    for i in (cand.get("last_known_institutions") or [])
                 ).lower()
                 blob = affs + " " + last_known
                 inst_tokens = [t for t in re.findall(r"[a-z]{4,}", inst_low)
@@ -120,7 +121,8 @@ class OpenAlexClient:
                     break
             if best is None:
                 best = data["results"][0]
-        self.cache[key] = best
+        if best:                 # a miss may be a rate limit; retry next time
+            self.cache[key] = best
         return best
 
     def enrich(self, prof: Professor) -> Professor:

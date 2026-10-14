@@ -40,6 +40,15 @@ class Professor:
     ai_score: int = 0
     ai_flags: str = ""
 
+    # Email verification
+    email_status: str = ""        # ok | suspect | invalid | unknown
+    email_confidence: int = 0
+    email_notes: str = ""
+    email_suggestion: str = ""
+
+    # Professor recheck (still publishing? still at this institution?)
+    profile_status: str = ""      # "active: ..." | "moved: ..." | "inactive: ..."
+
     # Bookkeeping
     source_sheet: str = ""
     source_row: int = 0
