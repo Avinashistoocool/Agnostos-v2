@@ -23,13 +23,15 @@ from .batches import plan_batches, run_batches, split_queries
 from .discover import COUNTRY_GROUPS
 from .enrich import OpenAlexClient
 from .excel_io import (_column_index, _find_header_row, append_rows, is_writable,
-                       load_for_sending, load_targets, mark_sent, sidecar_path,
-                       update_workbook, write_new_workbook)
+                       load_for_sending, load_targets, mark_replies, mark_sent,
+                       sidecar_path, update_workbook, write_new_workbook)
 from .llm import LLMEvaluator, confirm_gate, list_models
 from .mailer import Mailer
 from .matcher import filter_candidates
 from .resume_parser import parse_resume, save_profile
 from .recheck import recheck_all
+from .replies import ReplyChecker
+from .schedule import SendWindow, parse_at
 from .verify import load_cache, save_cache, verify_many
 
 BAR = "=" * 62
@@ -297,6 +299,22 @@ def cmd_send(args) -> int:
     profile = parse_resume(settings.require_resume(args.resume))
     rows = load_for_sending(path, sheet=args.sheet)
 
+    window = None
+    window_spec = args.local_window if args.local_window is not None else settings.send_local_window
+    if window_spec and window_spec.lower() not in {"off", "none", "any"}:
+        try:
+            window = SendWindow(window_spec, weekends=args.weekends)
+        except ValueError as exc:
+            print(f" ERROR: {exc}")
+            return 1
+    start_at = None
+    if args.at:
+        try:
+            start_at = parse_at(args.at)
+        except ValueError:
+            print(f" ERROR: --at wants HH:MM or 'YYYY-MM-DD HH:MM', got {args.at!r}")
+            return 1
+
     # --- Export mode: write .eml files you can open in any mail client ---
     if args.export:
         out_dir = Path(args.export_dir) if args.export_dir else settings.output_dir / "drafts"
@@ -346,15 +364,37 @@ def cmd_send(args) -> int:
             print(f" Mailing only the {args.top} highest-probability rows.")
         if settings.attachments:
             print(f" Attachments: {', '.join(Path(a).name for a in settings.attachments)}")
+        if start_at:
+            print(f" Scheduled start: {start_at:%a %d %b %Y %H:%M} (your local time)")
+        if window:
+            print(f" Local window: {window.spec} recipient time"
+                  f"{'' if window.weekends else ', weekdays only'}"
+                  f"{' - waiting for it' if args.wait else ' - others held for a later run'}")
         prompt = (" Send review copies to yourself now? [Y/N]: " if review_to
                   else " Send REAL emails to professors now? [Y/N]: ")
-        if input(prompt).strip().lower() not in {"y", "yes"}:
+        if args.yes:
+            print(" --yes given: not asking for confirmation.")
+        elif input(prompt).strip().lower() not in {"y", "yes"}:
             print(" Aborted.")
             return 2
+    elif window:
+        print(f" Local window: {window.spec} recipient time (dry run ignores --at/--wait)")
+
+    if start_at and not dry_run:
+        wait = (start_at - datetime.now()).total_seconds()
+        if wait > 0:
+            print(" Leave this window open (and the PC awake) until it finishes.")
+            Mailer._countdown(wait, label=f"sending starts at {start_at:%H:%M}")
 
     def progress(i, total, row, result):
         if result["status"] == "aborted":
             print(_safe(f"\n  ! Stopped: {result['detail']}"))
+            return
+        if result["status"] == "held":
+            held[0] += 1
+            if held[0] <= 5:
+                print(_safe(f"  [{i}/{total}] held         {row['email'][:40]:<40} "
+                            f"({row.get('country') or '?'}: {result['detail']})"))
             return
         print(_safe(f"  [{i}/{total}] {result['status']:<12} {row['email'][:40]:<40} "
                     f"({row['probability']}%)"))
@@ -368,10 +408,15 @@ def cmd_send(args) -> int:
                 print(_safe("  | " + line))
             print("  " + "-" * 58)
 
+    held = [0]
     with Mailer(settings, profile, dry_run=dry_run, redirect_to=review_to) as mailer:
         updates = mailer.send_batch(rows, progress=progress, resend=args.resend,
                                     top=args.top,
-                                    allow_unverified=args.allow_unverified)
+                                    allow_unverified=args.allow_unverified,
+                                    window=window, wait_for_window=args.wait)
+    if held[0]:
+        print(f"\n {held[0]} row(s) held: outside their local {window.spec} window. "
+              "Re-run later, or add --wait to sit until each window opens.")
 
     deferred = mark_sent(path, updates)
     sent = sum(1 for u in updates if u["status"] == "sent")
@@ -396,6 +441,60 @@ def cmd_send(args) -> int:
         print("\n To actually see these in your mail app, either:")
         print("   python -m outreach.cli send --review    # mail copies to yourself")
         print("   python -m outreach.cli send --export    # write .eml files to open")
+    return 0
+
+
+def cmd_check_replies(args) -> int:
+    path = settings.require_target_xlsx(args.xlsx)
+    rows = [r for r in load_for_sending(path, sheet=args.sheet)
+            if r["send_status"].lower() == "sent"]
+    _h("CHECK REPLIES")
+    if not rows:
+        print(f" No rows marked 'sent' in {path.name}.")
+        return 0
+    checker = ReplyChecker(settings)
+    print(f" {len(rows)} sent emails | mailbox {checker.user} @ {checker.host}")
+
+    def progress(folder, n, total, row):
+        sys.stdout.write(f"\r  scanning {folder}: {n}/{total}   ")
+        sys.stdout.flush()
+
+    try:
+        with checker:
+            print(f" Folders: {', '.join(checker.folders)}")
+            found = checker.check(rows, progress=progress)
+    except Exception as exc:
+        print(f"\n ERROR: IMAP failed: {type(exc).__name__}: {exc}")
+        print(" Set IMAP_HOST / IMAP_USER / IMAP_PASSWORD in .env if they differ from SMTP.")
+        return 1
+    print()
+
+    by_key = {(r["sheet"], r["row"]): r for r in rows}
+    counts = Counter(rep.kind for rep in found.values())
+    for kind in ("replied", "auto-reply", "bounced"):
+        hits = [(by_key[k], rep) for k, rep in found.items() if rep.kind == kind]
+        if not hits:
+            continue
+        print(f"\n {kind.upper()} ({len(hits)}):")
+        for row, rep in sorted(hits, key=lambda h: h[1].when or datetime.min):
+            when = f"{rep.when:%d %b %H:%M}" if rep.when else ""
+            print(_safe(f"   {when:<13} {str(row['name'])[:28]:<28} {row['email'][:36]}"))
+            if rep.snippet and kind == "replied":
+                print(_safe(f"                 \"{rep.snippet[:110]}\""))
+    waiting = len(rows) - len(found)
+    print(f"\n Summary: replied={counts['replied']} auto-reply={counts['auto-reply']} "
+          f"bounced={counts['bounced']} no answer yet={waiting}")
+
+    changed = {k: rep for k, rep in found.items()
+               if by_key[k].get("reply_status", "") != rep.status()}
+    if args.dry_run or not changed:
+        print(" Workbook unchanged." if not changed else " Dry run: workbook unchanged.")
+        return 0
+    if not is_writable(path):
+        print(_safe(f" {path.name} is open in Excel; close it and re-run to save statuses."))
+        return 1
+    mark_replies(path, changed)
+    print(f" Wrote {len(changed)} Reply Status update(s) to {path.name}.")
     return 0
 
 
@@ -801,7 +900,27 @@ def build_parser() -> argparse.ArgumentParser:
                     help="How many full drafts to print in dry-run")
     ss.add_argument("--allow-unverified", action="store_true",
                     help="Send even to rows `verify` marked invalid")
+    ss.add_argument("--at", metavar="TIME",
+                    help="Wait, then start sending at HH:MM (or 'YYYY-MM-DD HH:MM'), "
+                         "your local time")
+    ss.add_argument("--local-window", metavar="H-H",
+                    help="Only send inside the recipient's local hours, e.g. 9-11 "
+                         "(Country column; default SEND_LOCAL_WINDOW; 'off' disables)")
+    ss.add_argument("--wait", action="store_true",
+                    help="With a local window, keep running until every row's window "
+                         "opens instead of holding them for a later run")
+    ss.add_argument("--weekends", action="store_true",
+                    help="Allow the local window on Saturday/Sunday")
+    ss.add_argument("--yes", action="store_true",
+                    help="Skip the [Y/N] confirmation (for Task Scheduler / cron)")
     ss.set_defaults(func=cmd_send)
+
+    sy = sub.add_parser("check-replies",
+                        help="Scan your mailbox (IMAP) for replies, auto-replies and bounces")
+    sy.add_argument("--xlsx", help="Workbook containing the sent rows")
+    sy.add_argument("--sheet", help="Restrict to a single sheet name")
+    sy.add_argument("--dry-run", action="store_true", help="Report only")
+    sy.set_defaults(func=cmd_check_replies)
 
     sd = sub.add_parser("discover",
                         help="Find N professors from research topics, in K batches")

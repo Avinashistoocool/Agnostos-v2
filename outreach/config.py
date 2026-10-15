@@ -168,6 +168,15 @@ class Settings:
     send_delay_max: float = _f("SEND_DELAY_MAX", 240)
     daily_send_cap: int = _i("DAILY_SEND_CAP", 25)
     send_min_probability: int = _i("SEND_MIN_PROBABILITY", 0)
+    # Recipient-local hours to send in, e.g. "9-11". Blank = any time.
+    send_local_window: str = os.getenv("SEND_LOCAL_WINDOW", "")
+
+    # --- Reply tracking (`check-replies`). Defaults reuse the SMTP login. ---
+    imap_host: str = os.getenv("IMAP_HOST", "")
+    imap_port: int = _i("IMAP_PORT", 993)
+    imap_user: str = os.getenv("IMAP_USER", "")
+    imap_password: str = os.getenv("IMAP_PASSWORD", "")
+    imap_folders: str = os.getenv("IMAP_FOLDERS", "INBOX;SPAM;Junk;Junk Email")
 
     # --- Scraper ---
     proxy_server: str = os.getenv("PROXY_SERVER", "")

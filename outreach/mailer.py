@@ -15,6 +15,7 @@ from pathlib import Path
 
 from .config import Settings
 from .resume_parser import ResumeProfile
+from .schedule import fmt_duration as _fmt
 
 SIGNATURE = """
 --
@@ -100,7 +101,8 @@ class Mailer:
         msg["To"] = formataddr((to_name, to_email)) if to_name else to_email
         msg["Subject"] = subject
         msg["Date"] = formatdate(localtime=True)
-        msg["Message-ID"] = make_msgid()
+        msg["Message-ID"] = make_msgid(
+            domain=self.s.smtp_from.rpartition("@")[2] or None)
         if self.s.reply_to:
             msg["Reply-To"] = self.s.reply_to
         full_body = body.rstrip() + "\n" + self.signature
@@ -167,7 +169,11 @@ class Mailer:
 
     def send_batch(self, rows: list[dict], progress=None,
                    resend: bool = False, top: int | None = None,
-                   allow_unverified: bool = False) -> list[dict]:
+                   allow_unverified: bool = False, window=None,
+                   wait_for_window: bool = False) -> list[dict]:
+        """Send pending rows. With `window` (a schedule.SendWindow), a row only
+        goes out inside the recipient's local hours; rows outside it are left
+        untouched, or waited for when `wait_for_window` is set."""
         updates = []
         # A dry run must never block a later real send, so only genuine
         # deliveries count as already-handled.
@@ -180,8 +186,27 @@ class Mailer:
         if top:
             # Mail the N strongest matches, not the first N in sheet order.
             pending = sorted(pending, key=lambda r: -r.get("probability", 0))[:top]
+        total = len(pending)
+        queue = list(enumerate(pending, 1))
         consecutive_failures = 0
-        for i, row in enumerate(pending, 1):
+        while queue:
+            if window is not None:
+                pick = next((k for k, (_, r) in enumerate(queue) if window.ready(r)), None)
+                if pick is None:
+                    waits = [window.seconds_until(r) for _, r in queue]
+                    if wait_for_window and not self.dry_run:
+                        self._countdown(min(waits), label="next local send window opens")
+                        continue
+                    for (i, row), w in zip(queue, waits):
+                        if progress:
+                            progress(i, total, row, {
+                                "status": "held",
+                                "detail": f"outside local window, opens in {_fmt(w)}",
+                                "message": None})
+                    break
+                i, row = queue.pop(pick)
+            else:
+                i, row = queue.pop(0)
             if self.sent_count >= self.s.daily_send_cap and not self.dry_run:
                 updates.append({**row, "status": "skipped: daily cap reached"})
                 continue
@@ -195,7 +220,7 @@ class Mailer:
                                 "status": result["status"],
                                 "detail": result["detail"], "sent_at": ""})
                 if progress:
-                    progress(i, len(pending), row, result)
+                    progress(i, total, row, result)
                 continue
             result = self.send_one(row)
             update = {
@@ -205,9 +230,11 @@ class Mailer:
                 "sent_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 if result["status"] in {"sent", "review-sent", "dry-run"} else "",
             }
+            if result["status"] == "sent" and result.get("message") is not None:
+                update["message_id"] = result["message"]["Message-ID"]
             updates.append(update)
             if progress:
-                progress(i, len(pending), row, result)
+                progress(i, total, row, result)
 
             if result["status"].startswith("failed"):
                 # A mail server that rejects or drops several in a row is
@@ -216,7 +243,7 @@ class Mailer:
                 consecutive_failures += 1
                 if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                     if progress:
-                        progress(i, len(pending), row, {
+                        progress(i, total, row, {
                             "status": "aborted",
                             "detail": f"{consecutive_failures} consecutive SMTP failures; "
                                       "stopping so the rest stay sendable",
@@ -228,25 +255,24 @@ class Mailer:
                 continue
 
             consecutive_failures = 0
-            if i < len(pending) and result["status"] in {"sent", "review-sent"}:
+            if queue and result["status"] in {"sent", "review-sent"}:
                 delay = random.uniform(self.s.send_delay_min, self.s.send_delay_max)
                 self._countdown(delay)
         return updates
 
     @staticmethod
-    def _countdown(delay: float) -> None:
+    def _countdown(delay: float, label: str = "next email") -> None:
         """Sleep for `delay` seconds while showing a live timer on the console."""
         start = time.monotonic()
-        total = f"{int(delay) // 60:02d}:{int(delay) % 60:02d}"
+        total = _fmt(delay)
         while True:
             elapsed = time.monotonic() - start
             left = delay - elapsed
             if left <= 0:
                 break
-            e, l = int(elapsed), int(left + 0.999)
-            sys.stdout.write(f"\r    waiting {e // 60:02d}:{e % 60:02d} / {total} "
-                             f"(next email in {l // 60:02d}:{l % 60:02d})  ")
+            sys.stdout.write(f"\r    waiting {_fmt(elapsed)} / {total} "
+                             f"({label} in {_fmt(left + 0.999)})  ")
             sys.stdout.flush()
             time.sleep(min(1.0, left))
-        sys.stdout.write(f"\r    waited {total} between emails{' ' * 30}\n")
+        sys.stdout.write(f"\r    waited {total} ({label}){' ' * 40}\n")
         sys.stdout.flush()

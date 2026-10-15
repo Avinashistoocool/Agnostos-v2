@@ -362,10 +362,14 @@ def load_for_sending(path: str | Path, sheet: str | None = None) -> list[dict]:
                 "name": get("Professor Name") or get("Name") or "",
                 "email": str(email).strip(),
                 "institution": get("Institution") or "",
+                "country": str(get("Country") or "").strip(),
                 "subject": get("Email Subject") or "",
                 "body": str(body),
                 "probability": prob,
                 "send_status": str(get("Send Status") or "").strip(),
+                "sent_at": str(get("Sent At") or "").strip(),
+                "message_id": str(get("Message ID") or "").strip(),
+                "reply_status": str(get("Reply Status") or "").strip(),
                 "email_status": str(get("Email Status") or "").strip().lower(),
                 "suggested_email": str(get("Suggested Email") or "").strip(),
             })
@@ -440,13 +444,16 @@ def mark_sent(path: str | Path, updates: list[dict]) -> Path | None:
         ws = wb[upd["sheet"]]
         header_row = _find_header_row(ws)
         headers = _column_index(ws, header_row)
-        for name in ("Send Status", "Sent At"):
+        names = ["Send Status", "Sent At"] + (["Message ID"] if upd.get("message_id") else [])
+        for name in names:
             if name.lower() not in headers:
                 col = ws.max_column + 1
                 ws.cell(row=header_row, column=col, value=name)
                 headers[name.lower()] = col
         ws.cell(row=upd["row"], column=headers["send status"], value=upd["status"])
         ws.cell(row=upd["row"], column=headers["sent at"], value=upd.get("sent_at", ""))
+        if upd.get("message_id"):
+            ws.cell(row=upd["row"], column=headers["message id"], value=upd["message_id"])
     try:
         wb.save(path)
     except OSError:
@@ -458,5 +465,27 @@ def mark_sent(path: str | Path, updates: list[dict]) -> Path | None:
 
 def _park(sidecar: Path, updates: list[dict]) -> None:
     slim = [{"sheet": u["sheet"], "row": u["row"], "status": u["status"],
-             "sent_at": u.get("sent_at", "")} for u in updates]
+             "sent_at": u.get("sent_at", ""),
+             "message_id": u.get("message_id", "")} for u in updates]
     sidecar.write_text(json.dumps(slim, indent=2), encoding="utf-8")
+
+def mark_replies(path: str | Path, replies: dict) -> None:
+    """Write Reply Status / Follow-up Notes for {(sheet, row): Reply}."""
+    path = Path(path)
+    wb = load_workbook(path)
+    for (sheet, row), reply in replies.items():
+        ws = wb[sheet]
+        header_row = _find_header_row(ws)
+        headers = _column_index(ws, header_row)
+        for name in ("Reply Status", "Follow-up Notes"):
+            if name.lower() not in headers:
+                col = ws.max_column + 1
+                ws.cell(row=header_row, column=col, value=name)
+                headers[name.lower()] = col
+        ws.cell(row=row, column=headers["reply status"], value=reply.status())
+        note = "[reply] " + reply.subject + (f" | {reply.snippet}" if reply.snippet else "")
+        cell = ws.cell(row=row, column=headers["follow-up notes"])
+        # Never clobber notes you typed yourself.
+        if not cell.value or str(cell.value).startswith("[reply]"):
+            cell.value = note[:500]
+    wb.save(path)

@@ -32,7 +32,8 @@ python -m outreach.cli profile             # sanity-check resume parsing
 python -m outreach.cli models              # see what your key can run
 python -m outreach.cli run --mode list     # score + draft into your xlsx
 python -m outreach.cli send --dry-run      # preview the emails
-python -m outreach.cli send --live --top 10
+python -m outreach.cli send --live --top 10 --local-window 9-11
+python -m outreach.cli check-replies      # who answered?
 ```
 
 SMTP is only needed for the last step — you can draft everything without it. Mode A scraping is entirely optional, and `.env.example` is organised so that only its first section is required; everything else has working defaults.
@@ -147,7 +148,8 @@ The full flow:
 python -m outreach.cli discover --count 1000 --batches 4 --query "..."
 python -m outreach.cli verify --xlsx output/professors.xlsx --repair --apply --workers 6
 python -m outreach.cli run --mode list --xlsx output/professors.xlsx
-python -m outreach.cli send --live --top 10
+python -m outreach.cli send --live --top 10 --local-window 9-11
+python -m outreach.cli check-replies      # who answered?
 ```
 
 ### `recheck` — is everyone still there, and is every address current?
@@ -212,6 +214,11 @@ python -m outreach.cli send --live --top 10 --min-probability 60
 | `--delay-min/--delay-max S` | Randomised gap between sends |
 | `--resend` | Re-send rows already marked sent |
 | `--preview N` | How many full drafts to print in dry-run |
+| `--at TIME` | Wait (with a countdown), then start at `HH:MM` or `YYYY-MM-DD HH:MM`, your local time |
+| `--local-window H-H` | Only send inside the recipient's local hours, e.g. `9-11` (from the Country column; default `SEND_LOCAL_WINDOW`, `off` disables) |
+| `--wait` | With a local window, keep running until each row's window opens instead of holding it |
+| `--weekends` | Allow the local window on Saturday/Sunday (weekdays only by default) |
+| `--yes` | Skip the `[Y/N]` prompt, for Task Scheduler / cron |
 | `--xlsx PATH` / `--sheet NAME` / `--resume PATH` | Workbook, sheet, and resume (for the signature) |
 
 **Choosing how many to mail.** Three knobs, combinable:
@@ -222,6 +229,33 @@ python -m outreach.cli send --live --top 10 --min-probability 60
 - `DAILY_SEND_CAP` in `.env` is the default for `--limit`: a per-run cap on real sends (it does not count earlier runs that day).
 
 Rows already marked `sent` are skipped automatically, so an interrupted run is safe to resume. Dry runs never block a later real send.
+
+**Scheduling.** Emails land best mid-morning in the professor's own timezone.
+
+```bash
+# Start at 12:30 IST (09:00 CEST); only mail people for whom it is 9-11 locally
+python -m outreach.cli send --live --top 20 --at 12:30 --local-window 9-11
+# Same, but keep running until every row's window opens (e.g. Finland, then UK)
+python -m outreach.cli send --live --top 20 --local-window 9-11 --wait
+```
+
+Rows outside their window are left untouched and go out on a later run. The terminal must stay open and the PC awake. To run unattended every weekday, register a Windows scheduled task:
+
+```powershell
+schtasks /Create /TN AgnostosSend /SC WEEKLY /D MON,TUE,WED,THU,FRI /ST 12:30 `
+  /TR "cmd /c cd /d C:\path\to\Agnostos-v2 && python -m outreach.cli send --live --yes --top 20 --local-window 9-11 --wait >> output\send.log 2>&1"
+```
+
+Each successful send also stores its `Message ID`, which `check-replies` uses to match answers.
+
+### `check-replies` — who answered
+
+```bash
+python -m outreach.cli check-replies            # update Reply Status
+python -m outreach.cli check-replies --dry-run  # report only
+```
+
+Logs into your mailbox over IMAP (read-only, nothing is marked read), looks in `IMAP_FOLDERS` for mail from each `sent` professor or threaded to the stored Message ID, and classifies it as `replied`, `auto-reply` (out-of-office) or `bounced`. Results go to **Reply Status** (e.g. `replied 2026-10-16 14:02`) and a `[reply] subject | first lines` note in **Follow-up Notes** — notes you typed yourself are never overwritten. `IMAP_HOST` defaults to `SMTP_HOST` with `smtp.` → `imap.`, and the login reuses `SMTP_USER`/`SMTP_PASSWORD`.
 
 ---
 
@@ -283,9 +317,11 @@ The score and any review flags are written into the spreadsheet so you can sort 
 
 `Local Match Score` · `Probability of Acceptance` · `Probability Justification` · `Email Subject` · `Custom Email Draft` · `AI-Tell Score` · `Review Flags` · `Email Status` · `Email Confidence` · `Email Notes` · `Suggested Email` · `Profile Status` · `LLM Status` · `Send Status` · `Sent At` · `Reply Status` · `Follow-up Notes` (plus `OpenAlex ID` and `Institution`, filled in only when blank)
 
-Re-running is idempotent — existing columns are refreshed, never duplicated, and blank LLM results never overwrite cells you edited by hand. The humanised draft is what lands in `Custom Email Draft`, so you can edit it in Excel and send exactly what you read. `Reply Status` and `Follow-up Notes` are yours to maintain.
+Re-running is idempotent — existing columns are refreshed, never duplicated, and blank LLM results never overwrite cells you edited by hand. The humanised draft is what lands in `Custom Email Draft`, so you can edit it in Excel and send exactly what you read. `Reply Status` and `Follow-up Notes` are filled by `check-replies`; hand-typed notes are kept.
 
-**8. Dispatch** (`mailer.py`) — SMTP with STARTTLS/SSL/plain, auto-appended signature built from your resume, CV/transcript attachments, randomised delays, a daily cap, probability floor, top-N selection, `.eml` export, and dry-run previews. Statuses are written back to the workbook.
+**8. Dispatch** (`mailer.py`) — SMTP with STARTTLS/SSL/plain, auto-appended signature built from your resume, CV/transcript attachments, randomised delays, a daily cap, probability floor, top-N selection, a live countdown between sends, `--at` start times, recipient-local send windows, `.eml` export, and dry-run previews. Statuses and each Message-ID are written back to the workbook.
+
+**9. Reply tracking** (`replies.py`) — read-only IMAP scan of your inbox and spam folders; matches replies by sender address and by the stored Message-ID, and tells real replies from out-of-office auto-replies and bounces.
 
 ---
 
@@ -347,6 +383,9 @@ Every setting lives in `.env` (see `.env.example`, which is split into a require
 | `VERIFY_WORKERS` | `4` | Parallel email lookups |
 | `SEND_DELAY_MIN/MAX` | `90`/`240` | Seconds between emails |
 | `DAILY_SEND_CAP` | `25` | Stay under provider limits |
+| `SEND_LOCAL_WINDOW` | — | Recipient-local hours to send in, e.g. `9-11` |
+| `IMAP_HOST/PORT/USER/PASSWORD` | from SMTP | Mailbox for `check-replies` |
+| `IMAP_FOLDERS` | `INBOX;SPAM;Junk;Junk Email` | Folders to scan for replies |
 | `SEND_MIN_PROBABILITY` | `0` | Standing quality floor |
 | `RESPECT_ROBOTS` | `true` | Mode A |
 

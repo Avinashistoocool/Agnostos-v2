@@ -543,6 +543,39 @@ def main() -> int:
     assert _v._QUIET["depth"] == 0
     print("    ok: fingerprint compat, sidecar skip, fill-blank ids, safe --apply")
 
+    print("[16] scheduling + reply classification (no network)")
+    from datetime import datetime as _dt, timezone as _tz
+    from email.message import EmailMessage as _EM
+    from outreach.schedule import SendWindow, country_tz
+    from outreach.replies import classify
+    assert str(country_tz("Germany")) == "Europe/Berlin" and country_tz("") is None
+    win = SendWindow("9-11")
+    thu = _dt(2026, 10, 15, 8, 30, tzinfo=_tz.utc)   # London 09:30, Helsinki 11:30
+    assert win.ready({"country": "GB"}, thu) and not win.ready({"country": "FI"}, thu)
+    assert win.ready({"country": ""}, thu)             # unknown country never held
+    sat = _dt(2026, 10, 17, 8, 30, tzinfo=_tz.utc)
+    assert not win.ready({"country": "GB"}, sat)
+    assert SendWindow("9-11", weekends=True).ready({"country": "GB"}, sat)
+    held_rows = [{"sheet": "S", "row": n, "email": f"p{n}@x.org", "name": "P",
+                  "subject": "s", "body": "b", "probability": 50, "country": c}
+                 for n, c in ((2, "GB"), (3, "FI"))]
+
+    class _Clock(SendWindow):
+        def seconds_until(self, row, now=None):
+            return super().seconds_until(row, thu)
+    got = []
+    out = Mailer(settings, profile, dry_run=True).send_batch(
+        held_rows, window=_Clock("9-11"),
+        progress=lambda i, t, r, res: got.append((r["country"], res["status"])))
+    assert [u["row"] for u in out] == [2] and ("FI", "held") in got, got
+    m = _EM(); m["From"] = "Prof <p@x.org>"; m["Subject"] = "Re: internship"
+    assert classify(m) == "replied"
+    m2 = _EM(); m2["From"] = "p@x.org"; m2["Subject"] = "Out of Office: away"
+    assert classify(m2) == "auto-reply"
+    m3 = _EM(); m3["From"] = "MAILER-DAEMON@x.org"; m3["Subject"] = "Undeliverable"
+    assert classify(m3) == "bounced"
+    print("    ok: local windows, weekends, held rows, reply/auto/bounce")
+
     shutil.rmtree(TMP)
     print("\nALL SMOKE TESTS PASSED")
     return 0
