@@ -41,6 +41,8 @@ python -m outreach.cli replies --send --live   # send the ones marked "approved"
 
 `stats` reads the workbook (even while it's open in Excel) and every `send` appends each attempt to `output/send_log.csv`, so history survives later edits to the sheet.
 
+Certificate errors (`CERTIFICATE_VERIFY_FAILED ... _ssl.c:...`, common with python.org Python on macOS): run `pip install -U truststore certifi`, then `python -m outreach.cli tls-check`. Behind a TLS-inspecting proxy, set `SSL_CERT_FILE` to its root certificate.
+
 SMTP is only needed for the last step — you can draft everything without it. Mode A scraping is entirely optional, and `.env.example` is organised so that only its first section is required; everything else has working defaults.
 
 Don't have a list of professors yet? Build one from your research topic instead of collecting names by hand:

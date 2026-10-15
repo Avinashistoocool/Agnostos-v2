@@ -36,6 +36,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .models import Professor
+from .tls import urlopen as tls_urlopen
 
 API = "https://api.openalex.org"
 ROR_API = "https://api.ror.org/organizations/"
@@ -238,7 +239,7 @@ class Discoverer:
             "Accept": "application/json",
         })
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+            with tls_urlopen(req, timeout=self.timeout) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             self.last_error = (

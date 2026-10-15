@@ -16,6 +16,7 @@ from pathlib import Path
 from .config import Settings
 from .resume_parser import ResumeProfile
 from .schedule import fmt_duration as _fmt
+from .tls import context as tls_context
 
 SIGNATURE = """
 --
@@ -79,7 +80,7 @@ class Mailer:
                 time.sleep(15 * attempt)
 
     def _open(self):
-        context = ssl.create_default_context()
+        context = tls_context()
         timeout = self.s.smtp_timeout
         if self.s.smtp_security.lower() == "ssl":
             self._server = smtplib.SMTP_SSL(self.s.smtp_host, self.s.smtp_port,
@@ -312,12 +313,18 @@ class Mailer:
 
     @staticmethod
     def _countdown(delay: float, label: str = "next email") -> None:
-        """Sleep for `delay` seconds while showing a live timer on the console."""
-        start = time.monotonic()
+        """Sleep for `delay` seconds while showing a live timer on the console.
+
+        Uses the wall clock, not time.monotonic(): on macOS (and some Windows
+        builds) the monotonic clock pauses while the laptop sleeps, so a lid
+        close would silently stretch every wait by the time spent asleep.
+        """
+        start = time.time()
+        deadline = start + delay
         total = _fmt(delay)
         while True:
-            elapsed = time.monotonic() - start
-            left = delay - elapsed
+            now = time.time()
+            elapsed, left = now - start, deadline - now
             if left <= 0:
                 break
             sys.stdout.write(f"\r    waiting {_fmt(elapsed)} / {total} "

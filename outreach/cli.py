@@ -620,6 +620,39 @@ def cmd_replies(args) -> int:
     return 0
 
 
+def cmd_tls_check(args) -> int:
+    import socket
+    import ssl
+    from urllib.parse import urlparse
+    from .tls import context, describe
+    _h("TLS CHECK")
+    print(_safe(f" Python {sys.version.split()[0]} | {ssl.OPENSSL_VERSION}"))
+    print(_safe(f" Trust source: {describe()}"))
+    imap = settings.imap_host or settings.smtp_host.replace("smtp.", "imap.", 1)
+    hosts = [(settings.smtp_host, settings.smtp_port), (imap, settings.imap_port),
+             (urlparse(settings.base_url or "https://api.openai.com").hostname, 443),
+             ("api.openalex.org", 443)]
+    bad = 0
+    for host, port in hosts:
+        if not host:
+            continue
+        try:
+            with socket.create_connection((host, port), timeout=15) as sock:
+                if port in (587, 25):
+                    print(_safe(f"   skip   {host}:{port} (STARTTLS port; tested at send)"))
+                    continue
+                with context().wrap_socket(sock, server_hostname=host) as tls:
+                    print(_safe(f"   ok     {host}:{port}  {tls.version()}"))
+        except Exception as exc:
+            bad += 1
+            print(_safe(f"   FAIL   {host}:{port}  {type(exc).__name__}: {exc}"))
+    if bad:
+        print("\n Fixes:  pip install -U truststore certifi")
+        print("   macOS python.org build: run '/Applications/Python 3.x/Install Certificates.command'")
+        print("   Behind a proxy/antivirus that inspects TLS: export SSL_CERT_FILE=/path/to/its-root.pem")
+    return 1 if bad else 0
+
+
 def cmd_check_replies(args) -> int:
     path = settings.require_target_xlsx(args.xlsx)
     rows = [r for r in load_for_sending(path, sheet=args.sheet)
@@ -1095,6 +1128,9 @@ def build_parser() -> argparse.ArgumentParser:
     st.add_argument("--xlsx", help="Workbook to summarise")
     st.add_argument("--sheet", help="Restrict to a single sheet name")
     st.set_defaults(func=cmd_stats)
+
+    tc = sub.add_parser("tls-check", help="Diagnose certificate errors (e.g. on macOS)")
+    tc.set_defaults(func=cmd_tls_check)
 
     rp = sub.add_parser("replies",
                         help="Read each professor's full thread and draft follow-up replies")

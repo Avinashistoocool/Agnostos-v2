@@ -28,6 +28,7 @@ from .humanize import REWRITE_SYSTEM, build_rewrite_request, deslop, has_hard_cl
 from .humanize import score as ai_score
 from .models import Professor
 from .resume_parser import ResumeProfile
+from .tls import http_client
 
 SYSTEM_TEMPLATE = """You are an expert academic outreach strategist advising a student seeking a {position} in {geography}.
 
@@ -248,7 +249,7 @@ class LLMEvaluator:
         if self._client is None:
             self.settings.require_api_key()
             from openai import OpenAI
-            kwargs = {"api_key": self.settings.api_key}
+            kwargs = {"api_key": self.settings.api_key, "http_client": http_client()}
             if self.settings.base_url:
                 kwargs["base_url"] = self.settings.base_url
             self._client = OpenAI(**kwargs)
@@ -574,7 +575,7 @@ def list_models(settings: Settings) -> list[str]:
     """Live model list from whichever provider is configured."""
     settings.require_api_key()
     from openai import OpenAI
-    kwargs = {"api_key": settings.api_key}
+    kwargs = {"api_key": settings.api_key, "http_client": http_client()}
     if settings.base_url:
         kwargs["base_url"] = settings.base_url
     return sorted(m.id for m in OpenAI(**kwargs).models.list().data)

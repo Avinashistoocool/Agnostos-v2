@@ -9,8 +9,10 @@ PyYAML>=6.0
 # it falls back to scraping one search engine, which gets blocked quickly.
 ddgs>=9.0.0
 
-# CA bundle for reading university pages. Python on Windows has no CA store
-# of its own, so without this many valid institutional certificates fail.
+# TLS trust. python.org Python on macOS ships with NO CA store, so every
+# HTTPS/SMTP/IMAP call fails with CERTIFICATE_VERIFY_FAILED (_ssl.c:1144).
+# truststore uses the OS store (Keychain / Windows CertStore); certifi is the fallback.
+truststore>=0.9.0
 certifi>=2024.2.2
 
 # Mode A (faculty-directory scraping) only. Install with:

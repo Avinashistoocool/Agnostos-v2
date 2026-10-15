@@ -91,19 +91,9 @@ def _quiet_stderr():
 
 
 def _ssl_context():
-    """A CA bundle that actually covers European university hosts.
-
-    Python on Windows has no system CA store of its own, so many perfectly
-    valid institutional certificates fail to verify and the page comes back
-    empty - which looks exactly like "this professor publishes no address".
-    `certifi` ships the Mozilla bundle; fall back to the default if it is
-    not installed rather than disabling verification.
-    """
-    try:
-        import certifi
-        return ssl.create_default_context(cafile=certifi.where())
-    except Exception:
-        return ssl.create_default_context()
+    """A CA bundle that covers European university hosts on every OS (see tls.py)."""
+    from .tls import context
+    return context()
 
 
 _SSL = _ssl_context()

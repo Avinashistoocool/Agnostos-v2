@@ -89,11 +89,8 @@ class ReplyChecker:
         self.folders: list[str] = []
 
     def __enter__(self):
-        try:
-            import certifi
-            ctx = ssl.create_default_context(cafile=certifi.where())
-        except ImportError:
-            ctx = ssl.create_default_context()
+        from .tls import context
+        ctx = context()
         self.conn = imaplib.IMAP4_SSL(self.host, self.s.imap_port, ssl_context=ctx,
                                       timeout=60)
         self.conn.login(self.user, self.password)

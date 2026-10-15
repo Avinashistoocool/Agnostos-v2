@@ -12,6 +12,7 @@ import urllib.request
 from pathlib import Path
 
 from .models import Professor
+from .tls import urlopen as tls_urlopen
 
 API = "https://api.openalex.org"
 _CACHE_VERSION = 1
@@ -60,7 +61,7 @@ class OpenAlexClient:
             "Accept": "application/json",
         })
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+            with tls_urlopen(req, timeout=self.timeout) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             if exc.code == 429:
