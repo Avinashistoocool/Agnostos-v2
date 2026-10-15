@@ -1,4 +1,6 @@
-# Agnostos on Windows
+﻿# Agnostos on Windows
+
+See also: [FAQ](FAQ.md) · [Diagnostics](DIAGNOSTICS.md)
 
 This guide covers setup and daily use on Windows 10 or 11. It runs Agnostos as a local command-line tool.
 
@@ -133,7 +135,7 @@ A paced send runs for hours, and closing the lid normally puts the laptop to sle
   powercfg /setacvalueindex SCHEME_CURRENT SUB_SLEEP STANDBYIDLE 0
   powercfg /setactive SCHEME_CURRENT
   ```
-- Or install **Microsoft PowerToys → Awake** and set it to "Keep awake indefinitely".
+- Or install **Microsoft PowerToys â†’ Awake** and set it to "Keep awake indefinitely".
 
 If the machine does sleep, nothing is lost. Each sent email is saved to the workbook immediately. The send continues after you wake the machine, or on the next scheduled run.
 

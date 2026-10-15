@@ -1,4 +1,6 @@
-# Agnostos on Linux
+﻿# Agnostos on Linux
+
+See also: [FAQ](FAQ.md) · [Diagnostics](DIAGNOSTICS.md)
 
 This guide covers setup and daily use on Ubuntu/Debian, Fedora and Arch, as a desktop or a headless server. It runs Agnostos as a local command-line tool.
 
@@ -154,7 +156,7 @@ Cron uses the system timezone. Check it with `timedatectl`.
   `systemd-inhibit --what=sleep:idle python -m outreach.cli send --live ...`
 - To keep running with the lid closed on power, set `HandleLidSwitchExternalPower=ignore` in `/etc/systemd/logind.conf`, then run `sudo systemctl restart systemd-logind`.
 - On a headless server, run long manual jobs inside `tmux` so they survive SSH disconnects:
-  `tmux new -s agnostos` → run the command → `Ctrl+B D` to detach → `tmux attach -t agnostos` to return.
+  `tmux new -s agnostos` â†’ run the command â†’ `Ctrl+B D` to detach â†’ `tmux attach -t agnostos` to return.
 
 If the machine sleeps anyway, nothing is lost. Each sent email is saved immediately, and the waits use the wall clock.
 

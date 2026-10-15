@@ -43,7 +43,7 @@ python -m outreach.cli replies --send --live   # send the ones marked "approved"
 
 Certificate errors (`CERTIFICATE_VERIFY_FAILED ... _ssl.c:...`, common with python.org Python on macOS): run `pip install -U truststore certifi`, then `python -m outreach.cli tls-check`. Behind a TLS-inspecting proxy, set `SSL_CERT_FILE` to its root certificate.
 
-Step-by-step setup guides for each operating system: [Windows](Documentation-for%20Windows.md) · [macOS](Documentation-for%20Mac.md) · [Linux](Documentation-for%20Linux.md)
+Step-by-step setup guides for each operating system: [Windows](Documentation-for%20Windows.md) · [macOS](Documentation-for%20Mac.md) · [Linux](Documentation-for%20Linux.md) · Questions: [FAQ](FAQ.md) · Something broken: [Diagnostics](DIAGNOSTICS.md)
 
 SMTP is only needed for the last step — you can draft everything without it. Mode A scraping is entirely optional, and `.env.example` is organised so that only its first section is required; everything else has working defaults.
 

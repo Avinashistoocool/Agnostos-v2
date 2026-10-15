@@ -1,4 +1,6 @@
-# Agnostos on macOS
+﻿# Agnostos on macOS
+
+See also: [FAQ](FAQ.md) · [Diagnostics](DIAGNOSTICS.md)
 
 This guide covers setup and daily use on macOS 12 or later, on Apple Silicon or Intel. It runs Agnostos as a local command-line tool.
 
@@ -69,7 +71,7 @@ SEND_DELAY_MAX=600
 SEND_LOCAL_WINDOW=9-17
 ```
 
-> **Gmail / iCloud:** use an app password. For Gmail, create one at https://myaccount.google.com/apppasswords. For iCloud, go to appleid.apple.com → Sign-In and Security → App-Specific Passwords. iCloud SMTP is `smtp.mail.me.com` on port 587 with `starttls`.
+> **Gmail / iCloud:** use an app password. For Gmail, create one at https://myaccount.google.com/apppasswords. For iCloud, go to appleid.apple.com â†’ Sign-In and Security â†’ App-Specific Passwords. iCloud SMTP is `smtp.mail.me.com` on port 587 with `starttls`.
 
 ## 5. Check the setup
 
@@ -136,7 +138,7 @@ launchctl unload ~/Library/LaunchAgents/com.agnostos.send.plist   # stop
 
 The `caffeinate -i` wrapper keeps the Mac from idle-sleeping while a send is running.
 
-> If you keep the repo in `~/Desktop` or `~/Documents`, open **System Settings → Privacy & Security → Full Disk Access** and add `/usr/bin/caffeinate` and the venv's `python`. Without this, launchd can be blocked from reading those folders.
+> If you keep the repo in `~/Desktop` or `~/Documents`, open **System Settings â†’ Privacy & Security â†’ Full Disk Access** and add `/usr/bin/caffeinate` and the venv's `python`. Without this, launchd can be blocked from reading those folders.
 
 ## 8. Keep the Mac awake
 
@@ -148,7 +150,7 @@ If the Mac sleeps mid-run, nothing is lost. Each sent email is saved immediately
 
 ## 9. Monitor remotely (optional)
 
-Turn on **System Settings → General → Sharing → Remote Login**. Install Tailscale, then connect from another device:
+Turn on **System Settings â†’ General â†’ Sharing â†’ Remote Login**. Install Tailscale, then connect from another device:
 ```bash
 ssh <you>@<tailscale-ip>
 cd ~/Desktop/Agnostos-v2 && source .venv/bin/activate
