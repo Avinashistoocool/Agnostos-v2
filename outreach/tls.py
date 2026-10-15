@@ -71,6 +71,10 @@ def urlopen(req, timeout: float = 30):
 
 
 def http_client():
-    """httpx client for the OpenAI SDK using the same trust store."""
-    import httpx
+    """httpx client for the OpenAI SDK using the same trust store, or None
+    to let the SDK use its own transport when httpx isn't installed."""
+    try:
+        import httpx
+    except ImportError:
+        return None
     return httpx.Client(verify=context(), timeout=httpx.Timeout(600, connect=30))

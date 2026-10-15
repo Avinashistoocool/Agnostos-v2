@@ -14,6 +14,9 @@ ddgs>=9.0.0
 # truststore uses the OS store (Keychain / Windows CertStore); certifi is the fallback.
 truststore>=0.9.0
 certifi>=2024.2.2
+# Lets the OpenAI client use the same trust store (newer openai releases
+# no longer install httpx themselves).
+httpx>=0.27
 
 # Mode A (faculty-directory scraping) only. Install with:
 #   pip install playwright && python -m playwright install chromium

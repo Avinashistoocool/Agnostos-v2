@@ -249,7 +249,10 @@ class LLMEvaluator:
         if self._client is None:
             self.settings.require_api_key()
             from openai import OpenAI
-            kwargs = {"api_key": self.settings.api_key, "http_client": http_client()}
+            kwargs = {"api_key": self.settings.api_key}
+            client = http_client()
+            if client is not None:
+                kwargs["http_client"] = client
             if self.settings.base_url:
                 kwargs["base_url"] = self.settings.base_url
             self._client = OpenAI(**kwargs)
@@ -575,7 +578,10 @@ def list_models(settings: Settings) -> list[str]:
     """Live model list from whichever provider is configured."""
     settings.require_api_key()
     from openai import OpenAI
-    kwargs = {"api_key": settings.api_key, "http_client": http_client()}
+    kwargs = {"api_key": settings.api_key}
+    client = http_client()
+    if client is not None:
+        kwargs["http_client"] = client
     if settings.base_url:
         kwargs["base_url"] = settings.base_url
     return sorted(m.id for m in OpenAI(**kwargs).models.list().data)

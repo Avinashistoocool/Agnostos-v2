@@ -28,6 +28,7 @@ dependencies = [
     "PyYAML>=6.0",
     "certifi>=2024.2.2",
     "truststore>=0.9.0",
+    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]
