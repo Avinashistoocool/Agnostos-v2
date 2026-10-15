@@ -27,6 +27,7 @@ SIGNATURE = """
 # Mail servers that reject or drop this many messages in a row are throttling
 # or refusing the account; continuing just marks every remaining row failed.
 MAX_CONSECUTIVE_FAILURES = 3
+CONNECT_ATTEMPTS = 3
 
 
 def build_signature(profile: ResumeProfile) -> str:
@@ -64,6 +65,20 @@ class Mailer:
         if missing:
             raise RuntimeError(
                 f"SMTP settings still at placeholder values in .env: {', '.join(missing)}")
+        # A busy relay sometimes stalls the greeting/login; that is transient,
+        # so retry with backoff instead of aborting the whole run.
+        for attempt in range(1, CONNECT_ATTEMPTS + 1):
+            try:
+                self._open()
+                return
+            except (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError,
+                    TimeoutError, OSError):
+                self.close()
+                if attempt == CONNECT_ATTEMPTS:
+                    raise
+                time.sleep(15 * attempt)
+
+    def _open(self):
         context = ssl.create_default_context()
         timeout = self.s.smtp_timeout
         if self.s.smtp_security.lower() == "ssl":
@@ -195,6 +210,7 @@ class Mailer:
                 if pick is None:
                     waits = [window.seconds_until(r) for _, r in queue]
                     if wait_for_window and not self.dry_run:
+                        self.close()
                         self._countdown(min(waits), label="next local send window opens")
                         continue
                     for (i, row), w in zip(queue, waits):
@@ -257,6 +273,10 @@ class Mailer:
             consecutive_failures = 0
             if queue and result["status"] in {"sent", "review-sent"}:
                 delay = random.uniform(self.s.send_delay_min, self.s.send_delay_max)
+                if delay > 30 and not self.dry_run:
+                    # The relay drops idle sessions within minutes; reconnect
+                    # fresh for the next message rather than reuse a dead socket.
+                    self.close()
                 self._countdown(delay)
         return updates
 

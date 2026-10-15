@@ -20,6 +20,10 @@ import time
 from dataclasses import dataclass
 
 from .config import CACHE_MIN_PREFIX_TOKENS, Settings
+
+# gpt-5 / o-series replies include hidden reasoning tokens (~1-2k here).
+REASONING_MIN_TOKENS = 4000
+MAX_TOKEN_BUDGET = 16000
 from .humanize import REWRITE_SYSTEM, build_rewrite_request, deslop, has_hard_claims
 from .humanize import score as ai_score
 from .models import Professor
@@ -228,6 +232,15 @@ class LLMEvaluator:
             "max_completion_tokens": True,
             "temperature": True,
         }
+        # Reasoning models spend hidden tokens before writing anything; a cap
+        # sized for the visible JSON alone yields empty, truncated replies.
+        self.token_floor = settings.max_output_tokens
+
+    def _budget(self, model: str) -> int:
+        floor = self.token_floor
+        if self._is_reasoning(model):
+            floor = max(floor, REASONING_MIN_TOKENS)
+        return floor
 
     # --- client ---
     @property
@@ -260,7 +273,7 @@ class LLMEvaluator:
         else:
             cached = 0
             fresh = sys_tokens * n + sum(per_user)
-        out = n * int(self.settings.max_output_tokens * 0.55)
+        out = n * int(self._budget(model) * 0.55)
         if self.settings.humanize_rewrite:
             # Roughly a third of drafts trip the humanizer and get rewritten.
             rewrites = max(1, n // 3)
@@ -292,9 +305,14 @@ class LLMEvaluator:
         raise ValueError(f"Unparseable LLM response: {text[:200]}")
 
     # --- single call ---
+    @staticmethod
+    def _is_reasoning(model: str) -> bool:
+        name = (model or "").rpartition("/")[2]
+        return name.startswith("o") or name.startswith("gpt-5")
+
     def _supports_temperature(self, model: str) -> bool:
         # Reasoning models (o-series, gpt-5) reject an explicit temperature.
-        return not (model.startswith("o") or model.startswith("gpt-5"))
+        return not self._is_reasoning(model)
 
     def _build_request(self, model: str, message: str) -> dict:
         """Assemble a request using only the fields this endpoint has accepted.
@@ -311,9 +329,9 @@ class LLMEvaluator:
             ],
         }
         if self.caps["max_completion_tokens"]:
-            kwargs["max_completion_tokens"] = self.settings.max_output_tokens
+            kwargs["max_completion_tokens"] = self._budget(model)
         else:
-            kwargs["max_tokens"] = self.settings.max_output_tokens
+            kwargs["max_tokens"] = self._budget(model)
 
         if self.caps["json_schema"]:
             kwargs["response_format"] = {
@@ -355,6 +373,13 @@ class LLMEvaluator:
                     **self._build_request(model, message))
                 choice = resp.choices[0]
                 if choice.finish_reason == "length":
+                    budget = self._budget(model)
+                    if budget < MAX_TOKEN_BUDGET:
+                        # Learned once per run, like the capability downgrades.
+                        self.token_floor = min(budget * 2, MAX_TOKEN_BUDGET)
+                        print(f"  ~ reply truncated; raising output budget to "
+                              f"{self.token_floor} tokens and retrying")
+                        continue
                     raise ValueError("response truncated; raise MAX_OUTPUT_TOKENS")
                 data = self._parse(choice.message.content or "")
 
@@ -424,9 +449,9 @@ class LLMEvaluator:
             "messages": build_rewrite_request(body),
         }
         if self.caps["max_completion_tokens"]:
-            kwargs["max_completion_tokens"] = self.settings.max_output_tokens
+            kwargs["max_completion_tokens"] = self._budget(model)
         else:
-            kwargs["max_tokens"] = self.settings.max_output_tokens
+            kwargs["max_tokens"] = self._budget(model)
         if self.caps["temperature"] and self._supports_temperature(model):
             kwargs["temperature"] = 0.8  # higher temperature reads less uniform
         try:

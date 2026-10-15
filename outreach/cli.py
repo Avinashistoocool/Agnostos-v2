@@ -8,6 +8,7 @@
   python -m outreach.cli verify --repair
   python -m outreach.cli send --dry-run
   python -m outreach.cli send --live
+  python -m outreach.cli stats
 """
 from __future__ import annotations
 
@@ -32,6 +33,7 @@ from .resume_parser import parse_resume, save_profile
 from .recheck import recheck_all
 from .replies import ReplyChecker
 from .schedule import SendWindow, parse_at
+from .stats import append_send_log, collect, read_send_log
 from .verify import load_cache, save_cache, verify_many
 
 BAR = "=" * 62
@@ -419,6 +421,12 @@ def cmd_send(args) -> int:
               "Re-run later, or add --wait to sit until each window opens.")
 
     deferred = mark_sent(path, updates)
+    try:
+        append_send_log(settings.output_dir / "send_log.csv",
+                        "dry-run" if dry_run else ("review" if review_to else "live"),
+                        rows, updates)
+    except OSError as exc:
+        print(_safe(f" (could not append send_log.csv: {exc})"))
     sent = sum(1 for u in updates if u["status"] == "sent")
     review = sum(1 for u in updates if u["status"] == "review-sent")
     failed = [u for u in updates if u["status"].startswith("failed")]
@@ -441,6 +449,67 @@ def cmd_send(args) -> int:
         print("\n To actually see these in your mail app, either:")
         print("   python -m outreach.cli send --review    # mail copies to yourself")
         print("   python -m outreach.cli send --export    # write .eml files to open")
+    return 0
+
+
+def cmd_stats(args) -> int:
+    path = settings.require_target_xlsx(args.xlsx)
+    data = collect(path, sheet=args.sheet)
+    c = data["counts"]
+    _h(f"OUTREACH STATS - {path.name}")
+
+    def section(title, counter):
+        if not counter:
+            return
+        print(f"\n {title}")
+        for k, v in counter.most_common():
+            print(_safe(f"   {v:>5}  {k}"))
+
+    total = c["total"] or 1
+    print(" Funnel")
+    for label, n in [("professors in sheet", c["total"]),
+                     ("with an email address", c["with_email"]),
+                     ("drafted by the LLM", c["drafted"]),
+                     ("sent to the professor", c["sent"]),
+                     ("review copies sent to you", c["review_sent"])]:
+        print(f"   {n:>5}  {label:<28} ({100 * n / total:.0f}%)")
+    replied = data["reply"].get("replied", 0)
+    if c["sent"]:
+        print(f"   {replied:>5}  {'replied':<28} ({100 * replied / c['sent']:.0f}% of sent)")
+
+    section("Email verification", data["email"])
+    section("Why rows were / weren't drafted (LLM Status)", data["llm"])
+    section("Send Status", data["send"])
+    section("Replies", data["reply"])
+    section("Sent per day", Counter(dict(sorted(data["sent_days"].items()))))
+    if data["pending_sidecar"]:
+        print(f"\n {data['pending_sidecar']} status update(s) parked in the sidecar "
+              "(workbook was locked); counted above.")
+
+    log = read_send_log(settings.output_dir / "send_log.csv")
+    if log:
+        print("\n Send log (all attempts, incl. overwritten statuses)")
+        for (mode, status), n in sorted(log.items()):
+            print(_safe(f"   {n:>5}  {mode:<8} {status}"))
+
+    llm = data["llm"]
+    hints = []
+    if llm.get("skipped: over max-professors cap"):
+        hints.append(f"{llm['skipped: over max-professors cap']} rows were never drafted "
+                     f"because of MAX_PROFESSORS={settings.max_professors}. Re-run "
+                     "`run --max-professors N` to draft more.")
+    if llm.get("skipped: no email"):
+        hints.append(f"{llm['skipped: no email']} rows have no address; try `verify --repair`.")
+    if llm.get("skipped: local score below threshold"):
+        hints.append("Some rows fell below MIN_LOCAL_SCORE; lower it with `run --min-score`.")
+    waiting = data["send"].get("not attempted yet", 0) + data["send"].get("dry-run", 0)
+    if waiting:
+        hints.append(f"{waiting} drafted rows not yet mailed (dry-run only or untouched); "
+                     f"DAILY_SEND_CAP={settings.daily_send_cap} limits each live run.")
+    if hints:
+        print("\n Why so few were sent")
+        for h in hints:
+            print(_safe(f"   - {h}"))
     return 0
 
 
@@ -914,6 +983,11 @@ def build_parser() -> argparse.ArgumentParser:
     ss.add_argument("--yes", action="store_true",
                     help="Skip the [Y/N] confirmation (for Task Scheduler / cron)")
     ss.set_defaults(func=cmd_send)
+
+    st = sub.add_parser("stats", help="Count rows drafted, sent, replied, skipped (and why)")
+    st.add_argument("--xlsx", help="Workbook to summarise")
+    st.add_argument("--sheet", help="Restrict to a single sheet name")
+    st.set_defaults(func=cmd_stats)
 
     sy = sub.add_parser("check-replies",
                         help="Scan your mailbox (IMAP) for replies, auto-replies and bounces")

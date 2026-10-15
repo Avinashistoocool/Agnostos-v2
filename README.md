@@ -34,7 +34,10 @@ python -m outreach.cli run --mode list     # score + draft into your xlsx
 python -m outreach.cli send --dry-run      # preview the emails
 python -m outreach.cli send --live --top 10 --local-window 9-11
 python -m outreach.cli check-replies      # who answered?
+python -m outreach.cli stats              # funnel: drafted / sent / replied / skipped (and why)
 ```
+
+`stats` reads the workbook (even while it's open in Excel) and every `send` appends each attempt to `output/send_log.csv`, so history survives later edits to the sheet.
 
 SMTP is only needed for the last step — you can draft everything without it. Mode A scraping is entirely optional, and `.env.example` is organised so that only its first section is required; everything else has working defaults.
 
@@ -150,6 +153,7 @@ python -m outreach.cli verify --xlsx output/professors.xlsx --repair --apply --w
 python -m outreach.cli run --mode list --xlsx output/professors.xlsx
 python -m outreach.cli send --live --top 10 --local-window 9-11
 python -m outreach.cli check-replies      # who answered?
+python -m outreach.cli stats
 ```
 
 ### `recheck` — is everyone still there, and is every address current?
