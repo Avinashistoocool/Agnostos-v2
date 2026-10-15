@@ -35,6 +35,8 @@ python -m outreach.cli send --dry-run      # preview the emails
 python -m outreach.cli send --live --top 10 --local-window 9-11
 python -m outreach.cli check-replies      # who answered?
 python -m outreach.cli stats              # funnel: drafted / sent / replied / skipped (and why)
+python -m outreach.cli replies            # read each thread, draft follow-ups -> output/reply_queue.json
+python -m outreach.cli replies --send --live   # send the ones marked "approved": true
 ```
 
 `stats` reads the workbook (even while it's open in Excel) and every `send` appends each attempt to `output/send_log.csv`, so history survives later edits to the sheet.

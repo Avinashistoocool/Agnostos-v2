@@ -467,6 +467,50 @@ class LLMEvaluator:
         except Exception:
             return ""  # a failed rewrite is never fatal; the deslopped body stands
 
+    def chat_json(self, system: str, user: str, model: str | None = None,
+                  max_retries: int = 3) -> dict:
+        """One JSON-returning call with the same capability negotiation as drafting."""
+        model = model or self.settings.draft_model
+        attempt, last_error = 0, ""
+        while attempt < max_retries:
+            kwargs = {"model": model,
+                      "messages": [{"role": "system", "content": system},
+                                   {"role": "user", "content": user}]}
+            key = "max_completion_tokens" if self.caps["max_completion_tokens"] else "max_tokens"
+            kwargs[key] = self._budget(model)
+            if self.caps["json_object"]:
+                kwargs["response_format"] = {"type": "json_object"}
+            if self.caps["temperature"] and self._supports_temperature(model):
+                kwargs["temperature"] = 0.5
+            try:
+                resp = self.client.chat.completions.create(**kwargs)
+                choice = resp.choices[0]
+                if choice.finish_reason == "length" and self._budget(model) < MAX_TOKEN_BUDGET:
+                    self.token_floor = min(self._budget(model) * 2, MAX_TOKEN_BUDGET)
+                    continue
+                u = resp.usage
+                cached = getattr(getattr(u, "prompt_tokens_details", None), "cached_tokens", 0) or 0
+                self.usage["input"] += (getattr(u, "prompt_tokens", 0) or 0) - cached
+                self.usage["cached"] += cached
+                self.usage["output"] += getattr(u, "completion_tokens", 0) or 0
+                self.usage["calls"] += 1
+                return self._parse(choice.message.content or "")
+            except Exception as exc:
+                last_error = f"{type(exc).__name__}: {exc}"
+                if type(exc).__name__ == "BadRequestError":
+                    self.caps["json_schema"] = False
+                    for cap in ("json_object", "max_completion_tokens", "temperature"):
+                        if self.caps[cap]:
+                            self.caps[cap] = False
+                            break
+                    else:
+                        break
+                    continue
+                attempt += 1
+                if attempt < max_retries:
+                    time.sleep(2 ** attempt)
+        raise RuntimeError(last_error or "LLM call failed")
+
     def evaluate_all(self, professors: list[Professor], model: str | None = None,
                      progress=None, budget_usd: float | None = None) -> list[Professor]:
         model = model or self.settings.draft_model

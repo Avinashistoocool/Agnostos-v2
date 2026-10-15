@@ -107,6 +107,30 @@ class Mailer:
     def __exit__(self, *_exc):
         self.close()
 
+    def build_reply(self, to_email: str, to_name: str, subject: str, body: str,
+                    in_reply_to: str = "", references: str = "") -> EmailMessage:
+        """A threaded follow-up: Re: subject, In-Reply-To/References, no attachment."""
+        msg = EmailMessage()
+        from_name = self.s.smtp_from_name or (self.profile.name if self.profile else "")
+        msg["From"] = formataddr((from_name, self.s.smtp_from)) if from_name else self.s.smtp_from
+        msg["To"] = formataddr((to_name, to_email)) if to_name else to_email
+        msg["Subject"] = subject if subject.lower().startswith("re:") else f"Re: {subject}"
+        msg["Date"] = formatdate(localtime=True)
+        msg["Message-ID"] = make_msgid(domain=self.s.smtp_from.rpartition("@")[2] or None)
+        if in_reply_to:
+            msg["In-Reply-To"] = in_reply_to
+            msg["References"] = " ".join(x for x in (references, in_reply_to) if x).strip()
+        if self.s.reply_to:
+            msg["Reply-To"] = self.s.reply_to
+        msg.set_content(body.rstrip() + "\n" + self.signature)
+        return msg
+
+    def deliver(self, msg: EmailMessage) -> None:
+        if self.dry_run:
+            return
+        self._deliver(msg)
+        self.sent_count += 1
+
     # ---------- message ----------
     def build_message(self, to_email: str, to_name: str, subject: str,
                       body: str) -> EmailMessage:
@@ -185,14 +209,14 @@ class Mailer:
     def send_batch(self, rows: list[dict], progress=None,
                    resend: bool = False, top: int | None = None,
                    allow_unverified: bool = False, window=None,
-                   wait_for_window: bool = False) -> list[dict]:
+                   wait_for_window: bool = False, on_update=None) -> list[dict]:
         """Send pending rows. With `window` (a schedule.SendWindow), a row only
         goes out inside the recipient's local hours; rows outside it are left
         untouched, or waited for when `wait_for_window` is set."""
         updates = []
-        # A dry run must never block a later real send, so only genuine
-        # deliveries count as already-handled.
-        done = {"sent", "review-sent"}
+        # A dry run must never block a later real send, and neither may a
+        # review copy sent to yourself: only real deliveries count when live.
+        done = {"sent", "review-sent"} if self.redirect_to else {"sent"}
         pending = [
             r for r in rows
             if (resend or r.get("send_status", "").lower() not in done)
@@ -205,6 +229,10 @@ class Mailer:
         queue = list(enumerate(pending, 1))
         consecutive_failures = 0
         while queue:
+            if self.sent_count >= self.s.daily_send_cap and not self.dry_run:
+                # Leave the rest untouched for the next run instead of waiting
+                # out their local windows just to mark them skipped.
+                break
             if window is not None:
                 pick = next((k for k, (_, r) in enumerate(queue) if window.ready(r)), None)
                 if pick is None:
@@ -249,6 +277,8 @@ class Mailer:
             if result["status"] == "sent" and result.get("message") is not None:
                 update["message_id"] = result["message"]["Message-ID"]
             updates.append(update)
+            if on_update:
+                on_update(update)
             if progress:
                 progress(i, total, row, result)
 

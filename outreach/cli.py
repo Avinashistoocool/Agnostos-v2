@@ -411,11 +411,19 @@ def cmd_send(args) -> int:
             print("  " + "-" * 58)
 
     held = [0]
+
+    def checkpoint(update):
+        # Persist each real delivery immediately: a crash or closed window
+        # mid-run must not forget who was already mailed.
+        if update["status"] in {"sent", "review-sent"}:
+            mark_sent(path, [update])
+
     with Mailer(settings, profile, dry_run=dry_run, redirect_to=review_to) as mailer:
         updates = mailer.send_batch(rows, progress=progress, resend=args.resend,
                                     top=args.top,
                                     allow_unverified=args.allow_unverified,
-                                    window=window, wait_for_window=args.wait)
+                                    window=window, wait_for_window=args.wait,
+                                    on_update=None if dry_run else checkpoint)
     if held[0]:
         print(f"\n {held[0]} row(s) held: outside their local {window.spec} window. "
               "Re-run later, or add --wait to sit until each window opens.")
@@ -510,6 +518,105 @@ def cmd_stats(args) -> int:
         print("\n Why so few were sent")
         for h in hints:
             print(_safe(f"   - {h}"))
+    return 0
+
+
+def cmd_replies(args) -> int:
+    from .replier import ThreadReader, draft_reply, load_queue, save_queue
+    settings.ensure_dirs()
+    queue_path = settings.output_dir / "reply_queue.json"
+    profile = parse_resume(settings.require_resume(args.resume))
+
+    if args.send:
+        items = [q for q in load_queue(queue_path)
+                 if q.get("approved") and not q.get("sent_at") and q.get("body")]
+        _h(f"SEND FOLLOW-UPS ({'LIVE' if args.live else 'DRY RUN'})")
+        if not items:
+            print(f" Nothing approved in {queue_path.name}. Set \"approved\": true on the"
+                  " items you want, or pass --approve-all.")
+            return 0
+        if args.live and not args.yes and input(
+                f" Send {len(items)} replies now? [Y/N]: ").strip().lower() not in {"y", "yes"}:
+            print(" Aborted.")
+            return 2
+        all_items = load_queue(queue_path)
+        with Mailer(settings, profile, dry_run=not args.live) as mailer:
+            for q in items:
+                msg = mailer.build_reply(q["email"], q.get("name", ""), q["subject"],
+                                         q["body"], q.get("in_reply_to", ""),
+                                         q.get("references", ""))
+                try:
+                    mailer.deliver(msg)
+                    status = "sent" if args.live else "dry-run"
+                except Exception as exc:
+                    status = f"failed: {type(exc).__name__}"
+                print(_safe(f"  {status:<10} {q['email']}"))
+                if status == "sent":
+                    for a in all_items:
+                        if a["email"] == q["email"] and a.get("in_reply_to") == q.get("in_reply_to"):
+                            a["sent_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        save_queue(queue_path, all_items)
+        return 0
+
+    path = settings.require_target_xlsx(args.xlsx)
+    rows = [r for r in load_for_sending(path, sheet=args.sheet)
+            if r["send_status"].lower() == "sent"]
+    _h("READ CONVERSATIONS + DRAFT REPLIES")
+    if not rows:
+        print(f" No rows marked 'sent' in {path.name}.")
+        return 0
+
+    def progress(folder, n, total, row):
+        sys.stdout.write(f"\r  scanning {folder}: {n}/{total}   ")
+        sys.stdout.flush()
+
+    try:
+        with ThreadReader(settings) as reader:
+            threads = reader.threads(rows, progress=progress)
+    except Exception as exc:
+        print(f"\n ERROR: IMAP failed: {type(exc).__name__}: {exc}")
+        return 1
+    print()
+
+    old = {(q["email"], q.get("in_reply_to", "")): q for q in load_queue(queue_path)}
+    pending = [t for t in threads if t.awaiting_us()]
+    print(f" {len(threads)} conversations | {len(pending)} where the professor wrote last")
+    evaluator = LLMEvaluator(settings, profile)
+    queue = list(old.values())
+    for t in pending:
+        last = t.last_incoming
+        key = (t.row["email"], last.message_id)
+        if key in old and not args.redraft:
+            continue
+        try:
+            d = draft_reply(evaluator, t, settings, profile)
+        except Exception as exc:
+            print(_safe(f"  ! {t.row['email']}: {exc}"))
+            continue
+        refs = " ".join(m.message_id for m in t.messages if m.message_id and m is not last)
+        item = {"email": t.row["email"], "name": t.row.get("name", ""),
+                "institution": t.row.get("institution", ""),
+                "subject": last.subject or t.row.get("subject", ""),
+                "in_reply_to": last.message_id, "references": refs,
+                "their_message": last.text[:1500], "summary": d["summary"],
+                "action": d["action"], "body": d["body"],
+                "approved": bool(args.approve_all and d["action"] != "none"),
+                "drafted_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "sent_at": ""}
+        old[key] = item
+        queue = list(old.values())
+        save_queue(queue_path, queue)
+        print(_safe(f"\n  [{d['action']}] {t.row.get('name')} <{t.row['email']}>"))
+        print(_safe(f"    they said: {_safe(last.text[:160]).replace(chr(10), ' ')}"))
+        print(_safe(f"    status   : {d['summary']}"))
+        if d["body"]:
+            for line in d["body"].splitlines():
+                print(_safe("    | " + line))
+    save_queue(queue_path, queue)
+    print(f"\n {evaluator.usage_report()}")
+    print(f" Queue: {queue_path}")
+    print(" Edit bodies / set \"approved\": true, then:")
+    print("   python -m outreach.cli replies --send            # dry run")
+    print("   python -m outreach.cli replies --send --live     # really send")
     return 0
 
 
@@ -988,6 +1095,19 @@ def build_parser() -> argparse.ArgumentParser:
     st.add_argument("--xlsx", help="Workbook to summarise")
     st.add_argument("--sheet", help="Restrict to a single sheet name")
     st.set_defaults(func=cmd_stats)
+
+    rp = sub.add_parser("replies",
+                        help="Read each professor's full thread and draft follow-up replies")
+    rp.add_argument("--xlsx", help="Workbook containing the sent rows")
+    rp.add_argument("--sheet", help="Restrict to a single sheet name")
+    rp.add_argument("--resume", help="Path to resume")
+    rp.add_argument("--redraft", action="store_true", help="Redraft already-queued replies")
+    rp.add_argument("--approve-all", action="store_true",
+                    help="Mark every new reply/thank draft approved")
+    rp.add_argument("--send", action="store_true", help="Send approved replies from the queue")
+    rp.add_argument("--live", action="store_true", help="With --send: actually send")
+    rp.add_argument("--yes", action="store_true", help="Skip confirmation")
+    rp.set_defaults(func=cmd_replies)
 
     sy = sub.add_parser("check-replies",
                         help="Scan your mailbox (IMAP) for replies, auto-replies and bounces")
