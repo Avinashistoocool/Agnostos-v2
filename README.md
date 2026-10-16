@@ -1,4 +1,9 @@
-# Agnostos
+# Agnostos: AI research internship outreach
+
+**Agnostos** is a free, open-source tool that helps students land research internships. It finds professors whose recent papers match your resume, drafts one honest cold email per professor, sends them slowly from your own inbox during each professor's working hours, and drafts replies to the answers.
+
+> Hosted web version: [Agnostos web app](https://github.com/Avinashistoocool/Agnostos-v3) · Guides: [Windows](Documentation-for%20Windows.md) · [macOS](Documentation-for%20Mac.md) · [Linux](Documentation-for%20Linux.md) · [FAQ](FAQ.md)
+
 An autonomous, token-efficient pipeline for research internship outreach. Agnostos matches your CV against prospective supervisors, retrieves their recent publications, predicts acceptance probability, drafts tailored cold emails without generic LLM prose, and throttles outbound SMTP delivery.
 
 ```
