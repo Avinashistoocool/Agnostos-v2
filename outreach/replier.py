@@ -16,6 +16,7 @@ APPLICANT PROFILE
 {profile}
 
 Availability: {availability}
+Funding: {funding}
 
 You get the whole thread, oldest first. Decide what the student should do next:
 - "reply": the professor asked something, showed interest, suggested someone else, asked for a CV/transcript/call, or left a door open. Draft the reply.
@@ -152,7 +153,8 @@ class ThreadReader(ReplyChecker):
 
 def draft_reply(evaluator, thread: Thread, settings, profile) -> dict:
     system = REPLY_SYSTEM.format(position=settings.position, profile=profile.summary_block(),
-                                 availability=settings.availability)
+                                 availability=settings.availability,
+                                 funding=settings.funding_stance)
     row = thread.row
     user = (f"Professor: {row.get('name')} <{row['email']}>, {row.get('institution', '')}\n\n"
             f"THREAD (oldest first):\n{thread.render()}")

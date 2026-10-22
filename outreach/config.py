@@ -138,6 +138,24 @@ class Settings:
     position: str = os.getenv("POSITION", "summer research internship (undergraduate)")
     geography: str = os.getenv("GEOGRAPHY", "Europe (EU + Switzerland + UK)")
     availability: str = os.getenv("AVAILABILITY", "May-July 2027, 8-12 weeks, flexible")
+    # Whether the student can cover their own travel/living costs. Blank = not stated.
+    can_self_fund: str = os.getenv("CAN_SELF_FUND", "").strip().lower()
+    self_fund_note: str = os.getenv("SELF_FUND_NOTE", "").strip()
+
+    @property
+    def funding_stance(self) -> str:
+        note = f" ({self.self_fund_note})" if self.self_fund_note else ""
+        if self.can_self_fund in {"1", "true", "yes", "y", "on"}:
+            return ("The student CAN cover their own travel and living expenses" + note
+                    + ". If the professor raises funding, a stipend, or lack of money, say "
+                    "plainly that they can fund themselves, so funding need not be an obstacle.")
+        if self.can_self_fund in {"0", "false", "no", "n", "off"}:
+            return ("The student CANNOT cover their own expenses and needs a funded position"
+                    + note + ". If the professor says there is no funding, thank them and ask "
+                    "whether they know a fellowship, programme, or colleague that could fund "
+                    "a visit. Never offer to pay their own way.")
+        return ("Self-funding not stated. If funding comes up, do not promise either way; "
+                "write [FILL: can you cover your own expenses?].")
 
     # --- Enrichment ---
     use_openalex: bool = _b("USE_OPENALEX", True)

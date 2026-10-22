@@ -402,6 +402,8 @@ Every setting lives in `.env` (see `.env.example`, which is split into a require
 | `OPENAI_BASE_URL` | — | Optional: Azure/OpenRouter/proxy endpoint |
 | `DRAFT_MODEL` | provider default | Leave blank unless you have a preference |
 | `SCORE_MODEL` | provider default | |
+| `CAN_SELF_FUND` | blank | `yes`/`no`: whether you can cover your own travel/living costs. Shapes `replies` drafts when a professor mentions funding (blank = draft leaves a `[FILL]`) |
+| `SELF_FUND_NOTE` | — | Optional detail for the above, e.g. "family covers travel and 3 months' rent" |
 | `BUDGET_USD` | `5.0` | Hard ceiling per run; ignored on free tiers |
 | `MAX_PROFESSORS` | `50` | LLM call cap |
 | `MIN_LOCAL_SCORE` | `0.25` | Local filter threshold |
