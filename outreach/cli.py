@@ -527,6 +527,18 @@ def cmd_replies(args) -> int:
     queue_path = settings.output_dir / "reply_queue.json"
     profile = parse_resume(settings.require_resume(args.resume))
 
+    if args.approve_all:
+        existing = load_queue(queue_path)
+        newly = 0
+        for q in existing:
+            if not q.get("approved") and not q.get("sent_at") and q.get("body") \
+                    and q.get("action") != "none":
+                q["approved"] = True
+                newly += 1
+        if newly:
+            save_queue(queue_path, existing)
+            print(f" Approved {newly} queued draft(s) in {queue_path.name}.")
+
     if args.send:
         items = [q for q in load_queue(queue_path)
                  if q.get("approved") and not q.get("sent_at") and q.get("body")]
@@ -1139,7 +1151,7 @@ def build_parser() -> argparse.ArgumentParser:
     rp.add_argument("--resume", help="Path to resume")
     rp.add_argument("--redraft", action="store_true", help="Redraft already-queued replies")
     rp.add_argument("--approve-all", action="store_true",
-                    help="Mark every new reply/thank draft approved")
+                    help="Approve every unsent reply/thank draft (queued and new)")
     rp.add_argument("--send", action="store_true", help="Send approved replies from the queue")
     rp.add_argument("--live", action="store_true", help="With --send: actually send")
     rp.add_argument("--yes", action="store_true", help="Skip confirmation")

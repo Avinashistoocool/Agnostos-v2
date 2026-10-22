@@ -42,6 +42,7 @@ python -m outreach.cli check-replies      # who answered?
 python -m outreach.cli stats              # funnel: drafted / sent / replied / skipped (and why)
 python -m outreach.cli replies            # read each thread, draft follow-ups -> output/reply_queue.json
 python -m outreach.cli replies --send --live   # send the ones marked "approved": true
+python -m outreach.cli replies --send --approve-all   # approve every unsent draft, then dry-run send
 ```
 
 `stats` reads the workbook (even while it's open in Excel) and every `send` appends each attempt to `output/send_log.csv`, so history survives later edits to the sheet.
@@ -271,6 +272,20 @@ python -m outreach.cli check-replies --dry-run  # report only
 ```
 
 Logs into your mailbox over IMAP (read-only, nothing is marked read), looks in `IMAP_FOLDERS` for mail from each `sent` professor or threaded to the stored Message ID, and classifies it as `replied`, `auto-reply` (out-of-office) or `bounced`. Results go to **Reply Status** (e.g. `replied 2026-10-16 14:02`) and a `[reply] subject | first lines` note in **Follow-up Notes** — notes you typed yourself are never overwritten. `IMAP_HOST` defaults to `SMTP_HOST` with `smtp.` → `imap.`, and the login reuses `SMTP_USER`/`SMTP_PASSWORD`.
+
+### `replies` — draft and send follow-ups
+
+```bash
+python -m outreach.cli replies                              # draft follow-ups -> output/reply_queue.json
+python -m outreach.cli replies --approve-all                # approve every unsent reply/thank draft
+python -m outreach.cli replies --send                       # dry run of approved drafts
+python -m outreach.cli replies --send --live                 # really send approved drafts
+python -m outreach.cli replies --send --live --approve-all  # approve everything and send in one go
+```
+
+Review or edit bodies in `output/reply_queue.json` before sending; set `"approved": true` per item to approve selectively. `--approve-all` approves every queued draft that has a body, isn't already sent and whose action isn't `none` — including drafts queued by earlier runs. `--redraft` regenerates drafts already in the queue.
+
+If drafting fails with `403 ... model is not currently available upstream`, your provider no longer serves that model: run `python -m outreach.cli models` and set `DRAFT_MODEL` / `SCORE_MODEL` in `.env` to one that's listed.
 
 ---
 
