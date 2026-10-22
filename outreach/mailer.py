@@ -111,6 +111,9 @@ class Mailer:
     def build_reply(self, to_email: str, to_name: str, subject: str, body: str,
                     in_reply_to: str = "", references: str = "") -> EmailMessage:
         """A threaded follow-up: Re: subject, In-Reply-To/References, no attachment."""
+        # IMAP headers may arrive folded across lines; header values can't contain CR/LF.
+        subject, in_reply_to, references, to_name = (
+            " ".join(str(v or "").split()) for v in (subject, in_reply_to, references, to_name))
         msg = EmailMessage()
         from_name = self.s.smtp_from_name or (self.profile.name if self.profile else "")
         msg["From"] = formataddr((from_name, self.s.smtp_from)) if from_name else self.s.smtp_from

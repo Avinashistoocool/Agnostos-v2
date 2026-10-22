@@ -32,7 +32,7 @@ from .matcher import filter_candidates
 from .resume_parser import parse_resume, save_profile
 from .recheck import recheck_all
 from .replies import ReplyChecker
-from .schedule import SendWindow, parse_at
+from .schedule import SendWindow, fmt_duration, parse_at
 from .stats import append_send_log, collect, read_send_log
 from .verify import load_cache, save_cache, verify_many
 
@@ -521,6 +521,23 @@ def cmd_stats(args) -> int:
     return 0
 
 
+def _reply_countries(args) -> dict[str, str]:
+    """email -> Country column from the workbook, so replies use the same timezone."""
+    try:
+        path = settings.require_target_xlsx(args.xlsx)
+        return {r["email"].lower(): r.get("country", "")
+                for r in load_for_sending(path, sheet=args.sheet) if r.get("email")}
+    except Exception:
+        return {}
+
+
+def _tld_country(email: str) -> str:
+    tld = email.rsplit(".", 1)[-1].lower()
+    if tld == "uk":
+        return "GB"
+    return tld.upper() if len(tld) == 2 else ""
+
+
 def cmd_replies(args) -> int:
     from .replier import ThreadReader, draft_reply, load_queue, save_queue
     settings.ensure_dirs()
@@ -547,17 +564,48 @@ def cmd_replies(args) -> int:
             print(f" Nothing approved in {queue_path.name}. Set \"approved\": true on the"
                   " items you want, or pass --approve-all.")
             return 0
+        window = None
+        window_spec = (args.local_window if args.local_window is not None
+                       else settings.send_local_window)
+        if window_spec and window_spec.lower() not in {"off", "none", "any"}:
+            try:
+                window = SendWindow(window_spec, weekends=args.weekends)
+            except ValueError as exc:
+                print(f" ERROR: {exc}")
+                return 1
+            countries = _reply_countries(args)
+            for q in items:
+                if not q.get("country"):
+                    q["country"] = countries.get(q["email"].lower()) or _tld_country(q["email"])
+            print(f" Local window: {window.spec} recipient time"
+                  f"{'' if window.weekends else ', weekdays only'}"
+                  f"{' - waiting for it' if args.wait else ' - others held for a later run'}")
         if args.live and not args.yes and input(
                 f" Send {len(items)} replies now? [Y/N]: ").strip().lower() not in {"y", "yes"}:
             print(" Aborted.")
             return 2
         all_items = load_queue(queue_path)
+        held = []
         with Mailer(settings, profile, dry_run=not args.live) as mailer:
-            for q in items:
-                msg = mailer.build_reply(q["email"], q.get("name", ""), q["subject"],
-                                         q["body"], q.get("in_reply_to", ""),
-                                         q.get("references", ""))
+            pending = list(items)
+            while pending:
+                if window is not None:
+                    pick = next((k for k, q in enumerate(pending) if window.ready(q)), None)
+                    if pick is None:
+                        waits = [window.seconds_until(q) for q in pending]
+                        if args.wait and args.live:
+                            mailer.close()
+                            Mailer._countdown(min(waits), label="next local send window opens")
+                            continue
+                        held = list(zip(pending, waits))
+                        break
+                    q = pending.pop(pick)
+                else:
+                    q = pending.pop(0)
                 try:
+                    msg = mailer.build_reply(q["email"], q.get("name", ""), q["subject"],
+                                             q["body"], q.get("in_reply_to", ""),
+                                             q.get("references", ""))
                     mailer.deliver(msg)
                     status = "sent" if args.live else "dry-run"
                 except Exception as exc:
@@ -567,6 +615,14 @@ def cmd_replies(args) -> int:
                     for a in all_items:
                         if a["email"] == q["email"] and a.get("in_reply_to") == q.get("in_reply_to"):
                             a["sent_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    # Persist each delivery so an interrupted --wait run can't resend.
+                    save_queue(queue_path, all_items)
+        for q, w in held[:5]:
+            print(_safe(f"  held       {q['email']} ({q.get('country') or '?'}: "
+                        f"opens in {fmt_duration(w)})"))
+        if held:
+            print(f"\n {len(held)} reply(s) held: outside their local {window.spec} window. "
+                  "Re-run later, or add --wait to sit until each window opens.")
         save_queue(queue_path, all_items)
         return 0
 
@@ -1155,6 +1211,13 @@ def build_parser() -> argparse.ArgumentParser:
     rp.add_argument("--send", action="store_true", help="Send approved replies from the queue")
     rp.add_argument("--live", action="store_true", help="With --send: actually send")
     rp.add_argument("--yes", action="store_true", help="Skip confirmation")
+    rp.add_argument("--local-window", metavar="H-H",
+                    help="With --send: only send inside the recipient's local hours, e.g. 9-17 "
+                         "(default SEND_LOCAL_WINDOW; 'off' disables)")
+    rp.add_argument("--wait", action="store_true",
+                    help="With --local-window: keep running until every window opens")
+    rp.add_argument("--weekends", action="store_true",
+                    help="Allow the local window on Saturday/Sunday")
     rp.set_defaults(func=cmd_replies)
 
     sy = sub.add_parser("check-replies",

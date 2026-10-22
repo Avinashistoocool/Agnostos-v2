@@ -281,7 +281,10 @@ python -m outreach.cli replies --approve-all                # approve every unse
 python -m outreach.cli replies --send                       # dry run of approved drafts
 python -m outreach.cli replies --send --live                 # really send approved drafts
 python -m outreach.cli replies --send --live --approve-all  # approve everything and send in one go
+python -m outreach.cli replies --send --live --local-window 9-17 --wait  # send in each professor's working hours
 ```
+
+`--local-window`, `--wait` and `--weekends` work like they do for `send`. Each reply's timezone comes from the workbook's Country column (falling back to the email's country TLD, e.g. `.es`); `SEND_LOCAL_WINDOW` in `.env` is the default, `--local-window off` disables it. Sent replies are saved to the queue immediately, so stopping a `--wait` run never resends.
 
 Review or edit bodies in `output/reply_queue.json` before sending; set `"approved": true` per item to approve selectively. `--approve-all` approves every queued draft that has a body, isn't already sent and whose action isn't `none` — including drafts queued by earlier runs. `--redraft` regenerates drafts already in the queue.
 
