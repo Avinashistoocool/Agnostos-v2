@@ -152,6 +152,18 @@ Builds a large, ranked list of professors without you naming a single university
 | `--exclude XLSX` | Skip anyone already in this workbook (repeatable; a missing path prints a warning) |
 | `--resume PATH` | Resume used to derive default topics when `--query` is omitted |
 | `--fresh` | Discard saved batch progress |
+| `--top-universities N` | Only consider people at the region's N best universities, and favour higher-ranked ones (default `DISCOVER_TOP_UNIVERSITIES`, `0` = off) |
+| `--prestige-weight W` | With `--top-universities`: `0` = topic fit only, `1` = balanced (default), `3` = mostly prestige |
+| `--list-universities` | Print the region's top universities and exit |
+
+**Aiming for the best universities.** `--top-universities N` ranks the universities in `--countries` by how many highly-cited papers (50+ citations) they've published since `--since`. That proxy tracks the usual league tables closely (for `dach`: ETH Zurich, TUM, LMU, Zurich, Heidelberg, Bern, EPFL...) and needs no hardcoded list. Discovery then only searches papers from those universities and ranks people by topic fit plus a prestige bonus for their university's rank. Check the list first:
+
+```bash
+python -m outreach.cli discover --list-universities --countries europe --top-universities 30
+python -m outreach.cli discover --count 200 --countries europe --top-universities 30 --prestige-weight 2
+```
+
+Changing `--top-universities` starts a new batch plan; changing `--prestige-weight` doesn't.
 
 Progress is saved in `<output>.batches.json` after each batch, so re-running the same command resumes. Changing the topics, count, batches, countries, `--since`, `--min-h-index` or `--min-works` starts a new plan; `--max-pages` and `--exclude` can be changed without losing progress. If the output workbook is open in Excel when a batch finishes, the tool waits for you to close it rather than dropping the batch.
 
@@ -417,6 +429,8 @@ Every setting lives in `.env` (see `.env.example`, which is split into a require
 | `DISCOVER_QUERIES` | — | `;`-separated topics (default: resume interests) |
 | `DISCOVER_COUNTRIES` / `DISCOVER_SINCE` | `europe` / `2021` | Region and paper recency |
 | `DISCOVER_MAX_PAGES` | `40` | Page cap per batch |
+| `DISCOVER_TOP_UNIVERSITIES` | `0` | Restrict `discover` to the region's N best universities (0 = off) |
+| `DISCOVER_PRESTIGE_WEIGHT` | `1.0` | How much university rank counts against topic fit |
 | `VERIFY_WORKERS` | `4` | Parallel email lookups |
 | `SEND_DELAY_MIN/MAX` | `90`/`240` | Seconds between emails |
 | `DAILY_SEND_CAP` | `25` | Stay under provider limits |

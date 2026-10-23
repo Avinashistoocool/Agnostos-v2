@@ -129,8 +129,14 @@ def run_batch(disc: Discoverer, spec: BatchSpec, state: BatchState,
               skip_names: set[str] | None = None,
               inst_types: list[str] | None = None,
               resolve_domains: bool = True, min_relevance: float = 0.1,
+              top_unis: list[dict] | None = None, prestige_weight: float = 1.0,
               on_page=None) -> tuple[list[Professor], BatchResult]:
-    """Page through one query until `spec.quota` senior researchers are found."""
+    """Page through one query until `spec.quota` senior researchers are found.
+
+    With `top_unis` (best first), only people at those universities count, and
+    ranking blends topic fit with how highly their university ranks."""
+    ranks = {u["id"]: i + 1 for i, u in enumerate(top_unis or [])}
+    inst_ids = list(ranks) or None
     result = BatchResult(index=spec.index, query=spec.query, quota=spec.quota)
     if spec.query in state.exhausted:
         result.exhausted = True
@@ -145,7 +151,8 @@ def run_batch(disc: Discoverer, spec: BatchSpec, state: BatchState,
 
     while result.pages < max_pages and len(senior) < spec.quota:
         works, next_cursor, total = disc.fetch_page(
-            spec.query, countries, since_year, cursor=cursor, inst_types=inst_types)
+            spec.query, countries, since_year, cursor=cursor, inst_types=inst_types,
+            inst_ids=inst_ids)
         if not works:
             if disc.last_error:
                 page_error = disc.last_error
@@ -164,7 +171,7 @@ def run_batch(disc: Discoverer, spec: BatchSpec, state: BatchState,
                 if (w.get("relevance_score") or 0) >= floor
                 and (not anchor["fields"] or work_field(w) in anchor["fields"])]
         for work in kept:
-            disc.fold(work, people, countries)
+            disc.fold(work, people, countries, only_insts=ranks or None)
         # Results come best-first; once a whole page is below the floor the
         # rest of the query is noise, however many "matches" it claims.
         if floor and all((w.get("relevance_score") or 0) < floor for w in works):
@@ -199,8 +206,14 @@ def run_batch(disc: Discoverer, spec: BatchSpec, state: BatchState,
     # same name can surface twice within a batch; keep the stronger record.
     if skip_names is None:
         skip_names = set()
+    def rank_key(c: Candidate) -> float:
+        if not ranks or not c.uni_rank:
+            return -c.score
+        # Up to +5 for the #1 university, sliding to ~0 for the last one.
+        return -(c.score + prestige_weight * 5.0 * (1 - (c.uni_rank - 1) / len(ranks)))
+
     professors = []
-    for cand in sorted(senior.values(), key=lambda c: -c.score):
+    for cand in sorted(senior.values(), key=rank_key):
         if len(professors) >= spec.quota:
             break
         if name_key(cand.name) in skip_names:
@@ -224,7 +237,9 @@ def run_batches(queries: list[str], count: int = 1000, batches: int = 4,
                 state_path: Path | None = None, mailto: str = "", api_key: str = "",
                 cache_path: Path | None = None, carry_shortfall: bool = True,
                 inst_types: list[str] | None = None, resolve_domains: bool = True,
-                min_relevance: float = 0.1, on_batch_start=None, on_page=None, on_batch_done=None):
+                min_relevance: float = 0.1, top_universities: int = 0,
+                prestige_weight: float = 1.0, on_top_unis=None,
+                on_batch_start=None, on_page=None, on_batch_done=None):
     """Run (or resume) the whole plan. Yields `(professors, BatchResult)` per batch.
 
     A generator, so the caller can persist each batch to disk the moment it
@@ -237,10 +252,19 @@ def run_batches(queries: list[str], count: int = 1000, batches: int = 4,
         extra["min_relevance"] = min_relevance
     if inst_types is not None:
         extra["inst_types"] = sorted(inst_types)
+    if top_universities:
+        extra["top_universities"] = top_universities
     fp = fingerprint(queries, count, batches, codes, since_year, min_h_index,
                      min_works, extra)
     state = BatchState.load(state_path, fp) if state_path else BatchState(fingerprint=fp)
     disc = Discoverer(mailto=mailto, api_key=api_key, cache_path=cache_path)
+    top_unis = None
+    if top_universities:
+        top_unis = disc.top_universities(codes, top_universities, since_year)
+        if on_top_unis:
+            on_top_unis(top_unis, disc.last_error)
+        if not top_unis:
+            return
 
     skip_ids = set(state.taken)
     skip_names: set[str] = set()
@@ -266,7 +290,8 @@ def run_batches(queries: list[str], count: int = 1000, batches: int = 4,
                                min_works, max_pages_per_batch, skip_ids,
                                skip_names=skip_names, inst_types=inst_types,
                                resolve_domains=resolve_domains,
-                               min_relevance=min_relevance, on_page=on_page)
+                               min_relevance=min_relevance, top_unis=top_unis,
+                               prestige_weight=prestige_weight, on_page=on_page)
         carry = max(0, spec.quota - res.found) if carry_shortfall else 0
         yield profs, res
         # Only mark done once the caller has had the chance to save the rows.

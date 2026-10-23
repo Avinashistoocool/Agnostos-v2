@@ -851,6 +851,27 @@ def cmd_discover(args) -> int:
     settings.ensure_dirs()
     _h("DISCOVER TARGETS")
 
+    top_n = (args.top_universities if args.top_universities is not None
+             else settings.discover_top_universities)
+    prestige = (args.prestige_weight if args.prestige_weight is not None
+                else settings.discover_prestige_weight)
+    if args.list_universities:
+        from .discover import Discoverer, resolve_countries
+        disc = Discoverer(mailto=settings.openalex_mailto, api_key=settings.openalex_api_key,
+                          cache_path=settings.output_dir / "discover_cache.json")
+        countries = args.countries or settings.discover_countries
+        unis = disc.top_universities(resolve_countries(countries), top_n or 30,
+                                     args.since or settings.discover_since)
+        disc.save_cache()
+        if not unis:
+            print(f" No universities found. {disc.last_error}")
+            return 1
+        print(f" Top {len(unis)} universities in {countries} "
+              "(by highly-cited papers since " f"{args.since or settings.discover_since}):")
+        for i, u in enumerate(unis, 1):
+            print(_safe(f"  {i:>3}. {u['name']:<55} {u['country']}  {u['papers']:>6}"))
+        return 0
+
     queries = split_queries(args.query or settings.discover_queries)
     if not queries:
         # Default to what the resume says you actually work on; that is the
@@ -891,6 +912,8 @@ def cmd_discover(args) -> int:
     print(f" Target: {count} professors in {n_batches} batch(es) -> {out_path}")
     print(f" Region: {countries}   papers since {since}   seniority: "
           f"h-index>={args.min_h_index}, works>={args.min_works}")
+    if top_n:
+        print(f" Universities: only the region's top {top_n}, prestige weight {prestige:g}")
     for spec in plan:
         print(_safe(f"   batch {spec.index}: {spec.quota:>4} x '{spec.query}'"))
     if existing:
@@ -904,6 +927,13 @@ def cmd_discover(args) -> int:
         print(f"  page {page:>2}  +{n} papers  (topic has {total:,})  "
               f"senior researchers so far: {found}/{spec.quota}")
 
+    def on_top_unis(unis, err):
+        if not unis:
+            print(f" ! Could not rank universities: {err or 'no results'}")
+            return
+        print(_safe(" Top universities: " + ", ".join(u["name"] for u in unis[:12])
+                    + (f" ... (+{len(unis) - 12})" if len(unis) > 12 else "")))
+
     totals = {"found": 0}
     rows_now = [len(existing)]
     for profs, res in run_batches(
@@ -913,6 +943,7 @@ def cmd_discover(args) -> int:
             existing=existing + excluded, state_path=state_path,
             mailto=settings.openalex_mailto, api_key=settings.openalex_api_key,
             cache_path=settings.output_dir / "discover_cache.json",
+            top_universities=top_n, prestige_weight=prestige, on_top_unis=on_top_unis,
             on_batch_start=on_start, on_page=on_page):
         if res.error:
             print(f" ! {res.error}")
@@ -1254,6 +1285,16 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Seniority gate: skip people below this h-index")
     sd.add_argument("--min-works", type=int, default=20,
                     help="Seniority gate: skip people with fewer publications")
+    sd.add_argument("--top-universities", type=int, metavar="N",
+                    help="Only look at the N best universities in --countries "
+                         "(ranked by highly-cited output), and favour higher-ranked "
+                         "ones (default DISCOVER_TOP_UNIVERSITIES, 0 = off)")
+    sd.add_argument("--prestige-weight", type=float,
+                    help="With --top-universities: how much university rank counts "
+                         "against topic fit. 0 = fit only, 1 = balanced (default), "
+                         "3 = mostly prestige")
+    sd.add_argument("--list-universities", action="store_true",
+                    help="Just print the top universities for --countries and exit")
     sd.add_argument("--output",
                     help="Workbook to grow (default output/professors.xlsx)")
     sd.add_argument("--verify-emails", action="store_true",

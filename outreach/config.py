@@ -170,6 +170,9 @@ class Settings:
     discover_countries: str = os.getenv("DISCOVER_COUNTRIES", "europe")
     discover_since: int = _i("DISCOVER_SINCE", 2021)
     discover_max_pages: int = _i("DISCOVER_MAX_PAGES", 40)
+    # Restrict discovery to the region's N best universities (0 = off).
+    discover_top_universities: int = _i("DISCOVER_TOP_UNIVERSITIES", 0)
+    discover_prestige_weight: float = _f("DISCOVER_PRESTIGE_WEIGHT", 1.0)
     verify_workers: int = _i("VERIFY_WORKERS", 4)
 
     # --- Email ---

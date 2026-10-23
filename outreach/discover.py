@@ -65,6 +65,13 @@ COUNTRY_GROUPS = {
 DEFAULT_INST_TYPES = ["education", "facility"]
 
 
+def _top_rank(inst: dict, ranks: dict[str, int]) -> int:
+    """Best rank of `inst` or any parent in its lineage (e.g. a lab inside a university)."""
+    hits = [ranks[i] for i in [inst.get("id", "")] + list(inst.get("lineage") or [])
+            if i in ranks]
+    return min(hits) if hits else 0
+
+
 def _this_year() -> int:
     return datetime.now().year
 
@@ -188,6 +195,7 @@ class Candidate:
     works_count: int = 0
     cited_by_count: int = 0
     h_index: int = 0
+    uni_rank: int = 0          # rank among --top-universities, 0 = not used
 
     @property
     def score(self) -> float:
@@ -282,8 +290,56 @@ class Discoverer:
         return domain, homepage
 
     # ------------------------------------------------------------- search
+    # ------------------------------------------------------ top universities
+    def top_universities(self, countries: list[str], n: int,
+                         since_year: int) -> list[dict]:
+        """The region's `n` strongest universities, best first.
+
+        Ranked by how many highly-cited papers (>50 citations) they produced
+        since `since_year`: a field-agnostic proxy for reputation that tracks
+        the usual league tables (Oxford, Cambridge, ETH, TUM, ...) closely.
+        Returns [{"id", "name", "country", "papers"}].
+        """
+        key = f"topuni::{','.join(sorted(countries))}::{since_year}::{n}"
+        if key in self.cache:
+            return self.cache[key]
+        flt = [f"from_publication_date:{since_year}-01-01", "cited_by_count:>50",
+               "authorships.institutions.type:education"]
+        if countries:
+            flt.append("authorships.countries:" + "|".join(countries))
+        data = self._api("/works", {"filter": ",".join(flt),
+                                    "group_by": "authorships.institutions.id",
+                                    "per-page": 200}) or {}
+        groups = [g for g in data.get("group_by") or [] if g.get("key")]
+        meta: dict[str, dict] = {}
+        ids = [g["key"].rsplit("/", 1)[-1] for g in groups]
+        for start in range(0, len(ids), 50):
+            rows = self._api("/institutions", {
+                "filter": "openalex:" + "|".join(ids[start:start + 50]),
+                "per-page": 50, "select": "id,display_name,country_code,type"}) or {}
+            meta.update({r["id"]: r for r in rows.get("results", [])})
+            if sum(1 for r in meta.values() if self._is_uni(r, countries)) >= n:
+                break
+        out = []
+        for g in groups:
+            r = meta.get(g["key"])
+            if r and self._is_uni(r, countries):
+                out.append({"id": r["id"], "name": r.get("display_name", ""),
+                            "country": (r.get("country_code") or "").upper(),
+                            "papers": g.get("count", 0)})
+            if len(out) >= n:
+                break
+        if out:
+            self.cache[key] = out
+        return out
+
+    @staticmethod
+    def _is_uni(row: dict, countries: list[str]) -> bool:
+        return (row.get("type") == "education"
+                and (not countries or (row.get("country_code") or "").lower() in countries))
+
     def _work_filter(self, countries: list[str], since_year: int,
-                     inst_types: list[str]) -> str:
+                     inst_types: list[str], inst_ids: list[str] | None = None) -> str:
         # `has_doi` drops preprint duplicates and conference junk entries.
         parts = [f"from_publication_date:{since_year}-01-01",
                  "type:article", "has_doi:true"]
@@ -291,18 +347,23 @@ class Discoverer:
             parts.append("authorships.countries:" + "|".join(countries))
         if inst_types:
             parts.append("authorships.institutions.type:" + "|".join(inst_types))
+        if inst_ids:
+            parts.append("authorships.institutions.lineage:"
+                         + "|".join(i.rsplit("/", 1)[-1] for i in inst_ids))
         return ",".join(parts)
 
     def fetch_page(self, query: str, countries: list[str], since_year: int,
                    cursor: str = "*", per_page: int = 100,
-                   inst_types: list[str] | None = None) -> tuple[list[dict], str, int]:
+                   inst_types: list[str] | None = None,
+                   inst_ids: list[str] | None = None) -> tuple[list[dict], str, int]:
         """One page of matching works -> (works, next_cursor, total_matches).
 
         Exposed separately so batched discovery can stop and resume a query
         at exactly the page it reached.
         """
         flt = self._work_filter(countries, since_year,
-                                inst_types if inst_types is not None else DEFAULT_INST_TYPES)
+                                inst_types if inst_types is not None else DEFAULT_INST_TYPES,
+                                inst_ids)
         data = self._api("/works", {
             "search": query,
             "filter": flt,
@@ -319,8 +380,11 @@ class Discoverer:
         return data["results"], meta.get("next_cursor") or "", meta.get("count", 0)
 
     def fold(self, work: dict, people: dict[str, Candidate],
-             countries: list[str]) -> None:
-        """Credit one work to its first and last authors."""
+             countries: list[str], only_insts: dict[str, int] | None = None) -> None:
+        """Credit one work to its first and last authors.
+
+        With `only_insts` ({institution id: rank}), only authors affiliated
+        with one of those institutions are credited, under that affiliation."""
         authorships = work.get("authorships") or []
         # Mega-collaboration papers list every member of ATLAS. Nobody on
         # them chose to be there, so they carry no topical signal.
@@ -341,6 +405,10 @@ class Discoverer:
             if countries and not any(
                     (i.get("country_code") or "").lower() in countries for i in insts):
                 continue
+            if only_insts:
+                insts = [i for i in insts if _top_rank(i, only_insts)]
+                if not insts:
+                    continue
             inst = insts[0]
             cand = people.get(aid)
             if cand is None:
@@ -351,6 +419,8 @@ class Discoverer:
                 cand.institution = inst.get("display_name", "") or cand.institution
                 cand.country = (inst.get("country_code") or "").upper() or cand.country
                 cand.ror = inst.get("ror", "") or cand.ror
+                if only_insts:
+                    cand.uni_rank = _top_rank(inst, only_insts)
             cand.hits += 1
             if position == "last":
                 cand.lead_hits += 1
@@ -416,7 +486,8 @@ def to_professor(cand: Candidate, homepage: str = "") -> Professor:
         profile_url=homepage,
         notes=(f"{cand.hits} recent matching paper(s), "
                f"{cand.lead_hits} as senior author; "
-               f"h-index {cand.h_index}, {cand.works_count} works."),
+               f"h-index {cand.h_index}, {cand.works_count} works."
+               + (f" Top-university rank #{cand.uni_rank} in region." if cand.uni_rank else "")),
         recent_works=cand.titles[:4],
         openalex_id=cand.author_id,
         openalex_concepts=cand.topics[:8],
