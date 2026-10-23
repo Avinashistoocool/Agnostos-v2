@@ -73,19 +73,42 @@ def _quiet_stderr():
         return
     with _QUIET_LOCK:
         if _QUIET["depth"] == 0:
-            sys.stderr.flush()
-            _QUIET["saved"] = os.dup(fd)
-            _QUIET["devnull"] = os.open(os.devnull, os.O_WRONLY)
-            os.dup2(_QUIET["devnull"], fd)
-        _QUIET["depth"] += 1
+            saved = devnull = None
+            try:
+                sys.stderr.flush()
+                saved = os.dup(fd)
+                devnull = os.open(os.devnull, os.O_WRONLY)
+                os.dup2(devnull, fd)
+            except OSError:
+                # Some Windows consoles/pipes refuse dup2 ("Incorrect function").
+                # Muting is cosmetic; never let it fail the search itself.
+                for h in (saved, devnull):
+                    if h is not None:
+                        os.close(h)
+                saved = None
+            if saved is None:
+                muted = False
+            else:
+                _QUIET["saved"], _QUIET["devnull"] = saved, devnull
+                muted = True
+        else:
+            muted = True
+        if muted:
+            _QUIET["depth"] += 1
+    if not muted:
+        yield
+        return
     try:
         yield
     finally:
         with _QUIET_LOCK:
             _QUIET["depth"] -= 1
             if _QUIET["depth"] == 0:
-                sys.stderr.flush()
-                os.dup2(_QUIET["saved"], fd)
+                try:
+                    sys.stderr.flush()
+                    os.dup2(_QUIET["saved"], fd)
+                except OSError:
+                    pass
                 os.close(_QUIET["saved"])
                 os.close(_QUIET["devnull"])
 
@@ -762,10 +785,14 @@ def verify_professor(prof: Professor, finder: EmailFinder | None = None,
     if repair and finder:
         with _CACHE_LOCK:
             hit = (cache or {}).get(key)
-        if hit:
+        if hit and hit.get("score", 0.0) >= 1.75:
             found, source, score = hit.get("email", ""), hit.get("source", ""), hit.get("score", 0.0)
         else:
+            # Weak cached matches are rejected below anyway; search again
+            # rather than letting an old near-miss block the row forever.
             found, source, score = finder.find(prof)
+            if hit and hit.get("score", 0.0) > score:
+                found, source, score = hit.get("email", ""), hit.get("source", ""), hit.get("score", 0.0)
             if cache is not None and found:
                 # A miss is usually a blocked search engine, not a settled
                 # answer - caching it would make the next run miss too.
@@ -778,6 +805,9 @@ def verify_professor(prof: Professor, finder: EmailFinder | None = None,
     if repair and finder and not found and not (prof.email or "").strip():
         res.reasons = ["no address on this row, and none published on the pages searched"
                        + (f" ({finder.search_error[:60]})" if finder.search_error else "")]
+    elif found and score < 1.75 and not (prof.email or "").strip():
+        res.reasons = [f"no address on this row; only a weak match found ({found} on "
+                       f"{source}), not adopted"]
     if found and score >= 1.75:
         if not (prof.email or "").strip():
             # Rows from `discover` arrive with no address at all; the found
