@@ -602,6 +602,7 @@ def cmd_replies(args) -> int:
                     q = pending.pop(pick)
                 else:
                     q = pending.pop(0)
+                err = ""
                 try:
                     msg = mailer.build_reply(q["email"], q.get("name", ""), q["subject"],
                                              q["body"], q.get("in_reply_to", ""),
@@ -610,7 +611,12 @@ def cmd_replies(args) -> int:
                     status = "sent" if args.live else "dry-run"
                 except Exception as exc:
                     status = f"failed: {type(exc).__name__}"
-                print(_safe(f"  {status:<10} {q['email']}"))
+                    msg, err = None, str(exc)
+                files = [p.get_filename() for p in msg.iter_attachments()] if msg else []
+                extra = f"  [attached: {', '.join(files)}]" if files else ""
+                print(_safe(f"  {status:<10} {q['email']}{extra}"))
+                if err:
+                    print(_safe(f"             -> {err[:160]}"))
                 if status == "sent":
                     for a in all_items:
                         if a["email"] == q["email"] and a.get("in_reply_to") == q.get("in_reply_to"):

@@ -288,6 +288,8 @@ python -m outreach.cli replies --send --live --local-window 9-17 --wait  # send 
 
 Review or edit bodies in `output/reply_queue.json` before sending; set `"approved": true` per item to approve selectively. `--approve-all` approves every queued draft that has a body, isn't already sent and whose action isn't `none` — including drafts queued by earlier runs. `--redraft` regenerates drafts already in the queue.
 
+If a reply says something is attached (e.g. "I've attached my CV"), the files in `ATTACHMENTS` are attached to it automatically and the send log shows `[attached: ...]`. If that file is missing the reply fails instead of going out without the promised CV. Replies that don't mention an attachment are sent without one.
+
 If drafting fails with `403 ... model is not currently available upstream`, your provider no longer serves that model: run `python -m outreach.cli models` and set `DRAFT_MODEL` / `SCORE_MODEL` in `.env` to one that's listed.
 
 ---

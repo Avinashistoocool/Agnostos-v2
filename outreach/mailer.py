@@ -30,6 +30,13 @@ SIGNATURE = """
 MAX_CONSECUTIVE_FAILURES = 3
 CONNECT_ATTEMPTS = 3
 
+_ATTACH_RE = re.compile(r"\battach(?:ed|ing|ment|ments)?\b|\benclos(?:ed|ing)\b|"
+                        r"\bplease find my (?:cv|resume|transcript)", re.I)
+
+
+def mentions_attachment(body: str) -> bool:
+    return bool(_ATTACH_RE.search(body or ""))
+
 
 def build_signature(profile: ResumeProfile) -> str:
     return SIGNATURE.format(
@@ -110,7 +117,8 @@ class Mailer:
 
     def build_reply(self, to_email: str, to_name: str, subject: str, body: str,
                     in_reply_to: str = "", references: str = "") -> EmailMessage:
-        """A threaded follow-up: Re: subject, In-Reply-To/References, no attachment."""
+        """A threaded follow-up: Re: subject, In-Reply-To/References. ATTACHMENTS
+        (your CV) are added only when the body says something is attached."""
         # IMAP headers may arrive folded across lines; header values can't contain CR/LF.
         subject, in_reply_to, references, to_name = (
             " ".join(str(v or "").split()) for v in (subject, in_reply_to, references, to_name))
@@ -127,7 +135,25 @@ class Mailer:
         if self.s.reply_to:
             msg["Reply-To"] = self.s.reply_to
         msg.set_content(body.rstrip() + "\n" + self.signature)
+        if mentions_attachment(body):
+            # The draft promises an attachment, so it must actually be there.
+            if not self._attach_files(msg):
+                raise ValueError("reply says something is attached but no ATTACHMENTS "
+                                 "file exists; fix ATTACHMENTS in .env or edit the body")
         return msg
+
+    def _attach_files(self, msg: EmailMessage) -> int:
+        n = 0
+        for raw_path in self.s.attachments:
+            path = Path(raw_path)
+            if not path.exists():
+                continue
+            ctype, _ = mimetypes.guess_type(str(path))
+            maintype, _, subtype = (ctype or "application/octet-stream").partition("/")
+            msg.add_attachment(path.read_bytes(), maintype=maintype,
+                               subtype=subtype, filename=path.name)
+            n += 1
+        return n
 
     def deliver(self, msg: EmailMessage) -> None:
         if self.dry_run:
@@ -150,15 +176,7 @@ class Mailer:
             msg["Reply-To"] = self.s.reply_to
         full_body = body.rstrip() + "\n" + self.signature
         msg.set_content(full_body)
-
-        for raw_path in self.s.attachments:
-            path = Path(raw_path)
-            if not path.exists():
-                continue
-            ctype, encoding = mimetypes.guess_type(str(path))
-            maintype, _, subtype = (ctype or "application/octet-stream").partition("/")
-            msg.add_attachment(path.read_bytes(), maintype=maintype,
-                               subtype=subtype, filename=path.name)
+        self._attach_files(msg)
         return msg
 
     # ---------- sending ----------

@@ -28,6 +28,7 @@ RULES
 - Same honest, modest voice as a real second-year student: plain words, contractions fine, no em dashes, no markdown, no bullet lists, no "I am writing to", "delve", "leverage", "thrilled", "invaluable".
 - Start with a salutation using how the professor signed off or "Dear Professor <Surname>". End with a short sign-off and the student's first name; the signature is added automatically.
 - Keep replies under 150 words.
+- If the professor asks for a CV/resume, say it is attached ("I've attached my CV"); the CV file is attached automatically whenever the body says so. Never say something is attached otherwise, and never offer documents that are not the CV (e.g. a transcript) as attached; offer to send them instead.
 
 Return only JSON: {{"action": "reply|thank|none", "summary": "<one line on where the conversation stands>", "body": "<email body or empty>"}}"""
 
