@@ -202,6 +202,18 @@ class Settings:
     resend_daily_cap: int = _i("RESEND_DAILY_CAP", 100)
     resend_min_days: int = _i("RESEND_MIN_DAYS", 4)
 
+    # --- Funding follow-ups + meeting requests (`replies`, `followups`) ---
+    funding_followups: int = _i("FUNDING_FOLLOWUPS", 2)
+    followup_gap_days: float = _f("FOLLOWUP_GAP_DAYS", 2)
+    meet_minutes: int = _i("MEET_MINUTES", 20)
+    meet_lead_days: int = _i("MEET_LEAD_DAYS", 2)
+    meet_their_hours: str = os.getenv("MEET_THEIR_HOURS", "9-17")
+    meet_my_hours: str = os.getenv("MEET_MY_HOURS", "13-23")
+    meet_my_tz: str = os.getenv("MEET_MY_TZ", "Asia/Kolkata")
+    meet_link: str = os.getenv("MEET_LINK", "")
+    google_client_secret: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    google_calendar_id: str = os.getenv("GOOGLE_CALENDAR_ID", "primary")
+
     # --- Reply tracking (`check-replies`). Defaults reuse the SMTP login. ---
     imap_host: str = os.getenv("IMAP_HOST", "")
     imap_port: int = _i("IMAP_PORT", 993)

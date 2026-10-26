@@ -305,6 +305,20 @@ If a reply says something is attached (e.g. "I've attached my CV"), the files in
 If drafting fails with `403 ... model is not currently available upstream`, your provider no longer serves that model: run `python -m outreach.cli models` and set `DRAFT_MODEL` / `SCORE_MODEL` in `.env` to one that's listed.
 
 
+### Funding follow-ups and meeting requests
+
+When a professor says they can't fund you (or can only pay part), `replies` doesn't stop at a thank-you. It writes a reply that keeps the door open: partial support, a remote project, a shorter visit, or a joint fellowship application. If they then go quiet, each `replies` run drafts up to `FUNDING_FOLLOWUPS` (default 2) more follow-ups, sent only after `FOLLOWUP_GAP_DAYS` (default 2) of silence. As soon as they write back, the follow-ups stop.
+
+**Meeting requests.** Your second message in a thread always asks for a short call (`MEET_MINUTES`, default 20), and so does every funding follow-up. Each request offers three slots on different weekdays. Every slot falls inside the professor's `MEET_THEIR_HOURS` and your own `MEET_MY_HOURS` (in `MEET_MY_TZ`). Slots are never offered to two professors at once and, once Google Calendar is connected, avoid times you're already busy. When the email is sent, each proposed slot is added to your calendar as a tentative "HOLD". Delete the extra holds once the professor picks a time.
+
+**Google Calendar (one-time setup).**
+1. Go to [console.cloud.google.com](https://console.cloud.google.com/), create a project and enable the **Google Calendar API**.
+2. Under **OAuth consent screen**, choose External and add your Gmail as a *test user*.
+3. Under **Credentials**, choose *Create credentials*, then *OAuth client ID*, then **Desktop app**. Download the JSON and save it as `credentials.json` in the repo root (or point `GOOGLE_CLIENT_SECRET` at it).
+4. Run `python -m outreach.cli calendar-auth`. A browser opens once; the token is cached in `output/gcal_token.json`.
+
+Without the setup, meeting requests still go out. Only the calendar check and the holds are skipped.
+
 ### `resend` ? re-deliver the original email from a second account
 
 ```bash

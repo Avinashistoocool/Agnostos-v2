@@ -698,8 +698,161 @@ def cmd_resend(args) -> int:
     return 0
 
 
+def _qkey(q: dict) -> tuple:
+    """Identity of a queued email: a follow-up shares in_reply_to with the reply before it."""
+    return (q["email"], q.get("in_reply_to", ""), q.get("kind", "reply"), q.get("n", 0))
+
+
+def _meet_dur():
+    from datetime import timedelta
+    return timedelta(minutes=settings.meet_minutes)
+
+
+def _gcal_or_none():
+    from . import gcal
+    if not gcal.available():
+        return None
+    try:
+        return gcal.service()
+    except Exception as exc:
+        print(_safe(f" (Google Calendar unavailable: {exc}; slots won't be checked "
+                    "against your calendar)"))
+        return None
+
+
+def _held_slots(items) -> list:
+    """Slots already proposed in unsent/sent queue items, so two professors aren't offered the same time."""
+    out = []
+    for q in items:
+        for s in q.get("meet_slots") or []:
+            try:
+                start = datetime.fromisoformat(s)
+            except ValueError:
+                continue
+            out.append((start, start + _meet_dur()))
+    return out
+
+
+def _calendar_holds(q: dict) -> list[str]:
+    if not q.get("meet_slots"):
+        return []
+    from . import gcal
+    svc = _gcal_or_none()
+    if svc is None:
+        print(_safe("             (calendar holds skipped: run `calendar-auth` first)"))
+        return []
+    try:
+        slots = [datetime.fromisoformat(s) for s in q["meet_slots"]]
+        ids = gcal.create_holds(svc, slots, q.get("name", ""), q["email"],
+                                q.get("institution", ""))
+        print(_safe(f"             + {len(ids)} calendar hold(s) added"))
+        return ids
+    except Exception as exc:
+        print(_safe(f"             (calendar holds failed: {exc})"))
+        return []
+
+
+def _draft_funding_followups(threads, old, evaluator, profile, gcal_svc, taken,
+                             args, queue_path) -> list:
+    """Nudge professors who said they can't fund and then went quiet.
+
+    Up to FUNDING_FOLLOWUPS extra emails per thread, each only after
+    FOLLOWUP_GAP_DAYS of silence since our last message, each with a meeting
+    request. Stops for good as soon as the professor writes again (that turns
+    into a normal reply) or the limit is reached."""
+    from datetime import timedelta
+    from .replier import draft_followup, mentions_no_funding, plan_meeting, save_queue
+    from . import gcal
+    from .schedule import country_tz
+    limit, gap = settings.funding_followups, timedelta(days=settings.followup_gap_days)
+    made = 0
+    for t in threads:
+        if t.awaiting_us() or not any(
+                m.sender == "professor" and mentions_no_funding(m.text) for m in t.messages):
+            continue
+        last_prof = t.last_incoming
+        mine = [m for m in t.messages if m.sender == "student"
+                and (m.when or datetime.min) > (last_prof.when or datetime.min)]
+        if not mine:
+            continue
+        # Our follow-ups to this professor message, sent or still queued.
+        ours = [q for q in old.values() if q["email"] == t.row["email"]
+                and q.get("kind") == "followup" and q.get("in_reply_to") == last_prof.message_id]
+        if any(not q.get("sent_at") for q in ours):
+            continue                      # one is already waiting to go out
+        n = len(ours) + 1
+        if n > limit:
+            continue
+        last_mine = max((m.when for m in mine if m.when), default=None)
+        if last_mine and datetime.now() - last_mine < gap:
+            continue
+        tz = country_tz(t.row.get("country")) or country_tz(t.row["email"].rsplit(".", 1)[-1])
+        slots = gcal.propose_slots(tz, n=3, svc=gcal_svc, taken=taken)
+        lines = gcal.describe(slots, tz)
+        try:
+            body = draft_followup(evaluator, t, settings, profile, lines)
+        except Exception as exc:
+            print(_safe(f"  ! follow-up {t.row['email']}: {exc}"))
+            continue
+        refs = " ".join(m.message_id for m in t.messages if m.message_id)
+        item = {"email": t.row["email"], "name": t.row.get("name", ""),
+                "institution": t.row.get("institution", ""),
+                "subject": last_prof.subject or t.row.get("subject", ""),
+                "in_reply_to": last_prof.message_id, "references": refs,
+                "their_message": last_prof.text[:1500],
+                "summary": f"Funding follow-up {n}/{limit} after {settings.followup_gap_days:g} "
+                           "days of silence, with meeting request",
+                "action": "followup", "body": body, "kind": "followup", "n": n,
+                "meet_slots": [s.isoformat() for s in slots],
+                "approved": bool(args.approve_all),
+                "drafted_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "sent_at": ""}
+        old[_qkey(item)] = item
+        taken += [(s, s + _meet_dur()) for s in slots]
+        save_queue(queue_path, list(old.values()))
+        made += 1
+        print(_safe(f"\n  [follow-up {n}/{limit}] {t.row.get('name')} <{t.row['email']}>"))
+        for line in body.splitlines():
+            print(_safe("    | " + line))
+    if made:
+        print(f"\n {made} funding follow-up(s) drafted.")
+    return list(old.values())
+
+
+def _merge_sent_queue(threads, queue) -> None:
+    """Replies we sent over SMTP often have no copy in the IMAP Sent folder;
+    add them to each thread so 'who wrote last' and message counts are right."""
+    from .replier import Message
+    by_email = {}
+    for q in queue:
+        if q.get("sent_at") and q.get("body"):
+            by_email.setdefault(q["email"].lower(), []).append(q)
+    for t in threads:
+        for q in by_email.get(t.row["email"].lower(), []):
+            when = datetime.strptime(q["sent_at"][:19], "%Y-%m-%d %H:%M:%S")
+            if any(m.sender == "student" and m.when and abs((m.when - when).total_seconds()) < 600
+                   for m in t.messages):
+                continue
+            t.messages.append(Message(when=when, sender="student",
+                                      subject="Re: " + q.get("subject", ""), text=q["body"]))
+        t.messages.sort(key=lambda m: m.when or datetime.min)
+
+
+def cmd_calendar_auth(args) -> int:
+    from . import gcal
+    _h("GOOGLE CALENDAR AUTHORISATION")
+    secret, token = gcal._paths()
+    if not secret.exists() and not token.exists():
+        print(f" Missing OAuth client file: {secret}")
+        print(" See README > Google Calendar for the 2-minute setup.")
+        return 1
+    svc = gcal.service(interactive=True)
+    cal = svc.calendars().get(calendarId=settings.google_calendar_id).execute()
+    print(_safe(f" Authorised. Calendar: {cal.get('summary')} ({cal.get('timeZone')})"))
+    return 0
+
+
 def cmd_replies(args) -> int:
-    from .replier import ThreadReader, draft_reply, load_queue, save_queue
+    from .replier import ThreadReader, draft_reply, load_queue, plan_meeting, save_queue
     settings.ensure_dirs()
     queue_path = settings.output_dir / "reply_queue.json"
     profile = parse_resume(settings.require_resume(args.resume))
@@ -778,9 +931,12 @@ def cmd_replies(args) -> int:
                 if err:
                     print(_safe(f"             -> {err[:160]}"))
                 if status == "sent":
+                    holds = _calendar_holds(q)
                     for a in all_items:
-                        if a["email"] == q["email"] and a.get("in_reply_to") == q.get("in_reply_to"):
+                        if _qkey(a) == _qkey(q):
                             a["sent_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            if holds:
+                                a["calendar_events"] = holds
                     # Persist each delivery so an interrupted --wait run can't resend.
                     save_queue(queue_path, all_items)
         for q, w in held[:5]:
@@ -812,18 +968,23 @@ def cmd_replies(args) -> int:
         return 1
     print()
 
-    old = {(q["email"], q.get("in_reply_to", "")): q for q in load_queue(queue_path)}
+    old = {_qkey(q): q for q in load_queue(queue_path)}
+    _merge_sent_queue(threads, old.values())
     pending = [t for t in threads if t.awaiting_us()]
     print(f" {len(threads)} conversations | {len(pending)} where the professor wrote last")
     evaluator = LLMEvaluator(settings, profile)
+    gcal_svc, taken = _gcal_or_none(), _held_slots(old.values())
     queue = list(old.values())
     for t in pending:
         last = t.last_incoming
-        key = (t.row["email"], last.message_id)
-        if key in old and not args.redraft:
+        key = (t.row["email"], last.message_id, "reply", 0)
+        if key in old and (not args.redraft or old[key].get("sent_at")):
+            # Never redraft a reply that already went out: it would clear
+            # sent_at and the next --send would mail the professor again.
             continue
+        slots, slot_lines = plan_meeting(t, settings, gcal_svc, taken)
         try:
-            d = draft_reply(evaluator, t, settings, profile)
+            d = draft_reply(evaluator, t, settings, profile, slot_lines)
         except Exception as exc:
             print(_safe(f"  ! {t.row['email']}: {exc}"))
             continue
@@ -835,7 +996,11 @@ def cmd_replies(args) -> int:
                 "their_message": last.text[:1500], "summary": d["summary"],
                 "action": d["action"], "body": d["body"],
                 "approved": bool(args.approve_all and d["action"] != "none"),
+                "kind": "reply", "n": 0,
+                "meet_slots": [s.isoformat() for s in slots] if d["action"] != "none" else [],
                 "drafted_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "sent_at": ""}
+        if item["meet_slots"]:
+            taken += [(s, s + _meet_dur()) for s in slots]
         old[key] = item
         queue = list(old.values())
         save_queue(queue_path, queue)
@@ -845,6 +1010,8 @@ def cmd_replies(args) -> int:
         if d["body"]:
             for line in d["body"].splitlines():
                 print(_safe("    | " + line))
+    queue = _draft_funding_followups(threads, old, evaluator, profile, gcal_svc, taken,
+                                     args, queue_path)
     save_queue(queue_path, queue)
     print(f"\n {evaluator.usage_report()}")
     print(f" Queue: {queue_path}")
@@ -1416,6 +1583,10 @@ def build_parser() -> argparse.ArgumentParser:
     rp.add_argument("--weekends", action="store_true",
                     help="Allow the local window on Saturday/Sunday")
     rp.set_defaults(func=cmd_replies)
+
+    ca = sub.add_parser("calendar-auth",
+                        help="One-time Google Calendar sign-in for meeting holds")
+    ca.set_defaults(func=cmd_calendar_auth)
 
     rs = sub.add_parser("resend",
                         help="Re-deliver the original email from a second account "

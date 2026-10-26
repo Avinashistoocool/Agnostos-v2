@@ -1,6 +1,8 @@
 # secrets
 .env
 .env.local
+credentials.json
+client_secret*.json
 
 # generated output
 output/
