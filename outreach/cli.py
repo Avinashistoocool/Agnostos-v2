@@ -558,7 +558,9 @@ def cmd_resend(args) -> int:
         s, smtp_host=s.resend_smtp_host, smtp_port=s.resend_smtp_port,
         smtp_security=s.resend_smtp_security, smtp_user=s.resend_smtp_user,
         smtp_password=s.resend_smtp_password, smtp_from=s.resend_smtp_from,
-        reply_to="", daily_send_cap=args.limit or s.resend_daily_cap)
+        reply_to="", daily_send_cap=args.limit or s.resend_daily_cap,
+        send_delay_min=args.delay_min if args.delay_min is not None else s.send_delay_min,
+        send_delay_max=args.delay_max if args.delay_max is not None else s.send_delay_max)
     _h(f"RESEND ORIGINAL EMAILS FROM {alt.smtp_from or '?'} "
        f"({'LIVE' if args.live else 'DRY RUN'})")
     if args.live and not (alt.smtp_user and alt.smtp_password):
@@ -1606,6 +1608,8 @@ def build_parser() -> argparse.ArgumentParser:
     rs.add_argument("--prioritize-top", type=int, default=50, metavar="N",
                     help="Send to the region's N best universities first (default 50, 0 = off)")
     rs.add_argument("--region", help="Region for --prioritize-top (default DISCOVER_COUNTRIES)")
+    rs.add_argument("--delay-min", type=float, help="Min seconds between emails (default SEND_DELAY_MIN)")
+    rs.add_argument("--delay-max", type=float, help="Max seconds between emails (default SEND_DELAY_MAX)")
     rs.add_argument("--live", action="store_true", help="Actually send (default: dry run)")
     rs.add_argument("--yes", action="store_true", help="Skip confirmation")
     rs.set_defaults(func=cmd_resend)
