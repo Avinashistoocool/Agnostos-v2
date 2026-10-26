@@ -304,6 +304,17 @@ If a reply says something is attached (e.g. "I've attached my CV"), the files in
 
 If drafting fails with `403 ... model is not currently available upstream`, your provider no longer serves that model: run `python -m outreach.cli models` and set `DRAFT_MODEL` / `SCORE_MODEL` in `.env` to one that's listed.
 
+
+### `resend` ? re-deliver the original email from a second account
+
+```bash
+python -m outreach.cli resend                                   # dry run: who would get it
+python -m outreach.cli resend --live --local-window 9-17 --wait # send
+python -m outreach.cli resend --who bounced --live              # only bounced ones
+```
+
+Sends the **exact original subject and body** (no redraft) through `RESEND_SMTP_*` (e.g. a Gmail account with an [app password](https://myaccount.google.com/apppasswords)) to professors who were mailed but never answered (`--who noreply`), whose mail bounced (`--who bounced`), or both (`all`, default). It skips anyone who replied or auto-replied, anyone already resent (tracked in `send_log.csv` and a `Resent At` column), and anyone first mailed less than `RESEND_MIN_DAYS` ago. Bounced rows go first, and `RESEND_DAILY_CAP` limits sends per day. The original `Send Status`/`Sent At`/`Message ID` are never changed. A hard bounce means the address itself was rejected, so re-verify those addresses before resending.
+
 ---
 
 ## The pipeline
