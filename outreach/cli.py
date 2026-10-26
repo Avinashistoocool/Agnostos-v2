@@ -615,8 +615,20 @@ def cmd_resend(args) -> int:
             continue
         r["send_status"] = ""
         rows.append(r)
-    # Bounced first: they are the ones who certainly never saw it.
-    rows.sort(key=lambda r: (not r["reply_status"].lower().startswith("bounced"),
+    # Top universities first (Imperial, Oxford, ETH...), bounced first within a tier.
+    ranks = {}
+    if args.prioritize_top:
+        from .discover import Discoverer, resolve_countries
+        disc = Discoverer(mailto=s.openalex_mailto, api_key=s.openalex_api_key,
+                          cache_path=s.output_dir / "discover_cache.json")
+        unis = disc.top_universities(resolve_countries(args.region or s.discover_countries),
+                                     args.prioritize_top, s.discover_since)
+        disc.save_cache()
+        ranks = {u["name"].strip().lower(): i for i, u in enumerate(unis, 1)}
+        print(_safe(f" Prioritising top {len(ranks)} universities: "
+                    + ", ".join(u["name"] for u in unis[:8]) + " ..."))
+    rows.sort(key=lambda r: (ranks.get(str(r["institution"]).strip().lower(), 10_000),
+                             not r["reply_status"].lower().startswith("bounced"),
                              r["sent_at"]))
     room = max(0, alt.daily_send_cap - today) if args.live else alt.daily_send_cap
     print(f" Eligible: {len(rows)} | already resent today: {today} | this run: "
@@ -669,6 +681,7 @@ def cmd_resend(args) -> int:
         if result["status"] == "held":
             return
         print(_safe(f"  [{i}/{total}] {result['status']:<10} {row['email'][:40]:<40} "
+                    f"{str(row['institution'])[:30]:<30} "
                     f"({(row['reply_status'] or 'no reply')[:22]})"))
         if result["status"].startswith("failed"):
             print(_safe(f"       -> {result.get('detail', '')[:140]}"))
@@ -1419,6 +1432,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Recipient local hours, e.g. 9-17 (default SEND_LOCAL_WINDOW)")
     rs.add_argument("--wait", action="store_true", help="Wait for each window to open")
     rs.add_argument("--weekends", action="store_true", help="Allow Saturday/Sunday")
+    rs.add_argument("--prioritize-top", type=int, default=50, metavar="N",
+                    help="Send to the region's N best universities first (default 50, 0 = off)")
+    rs.add_argument("--region", help="Region for --prioritize-top (default DISCOVER_COUNTRIES)")
     rs.add_argument("--live", action="store_true", help="Actually send (default: dry run)")
     rs.add_argument("--yes", action="store_true", help="Skip confirmation")
     rs.set_defaults(func=cmd_resend)
