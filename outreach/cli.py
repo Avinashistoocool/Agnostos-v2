@@ -181,6 +181,9 @@ def cmd_run(args) -> int:
         xlsx = settings.require_target_xlsx(args.xlsx)
         professors = load_targets(xlsx, sheet=args.sheet)
         print(f" Loaded {len(professors)} professors from {xlsx.name}")
+        # Rewriting a sent row's draft would lose the record of what was
+        # actually mailed (and re-sends/follow-ups must use that text).
+        professors = _drop_sent(xlsx, professors)
     if not professors:
         print(" No professors found. Aborting.")
         return 1
