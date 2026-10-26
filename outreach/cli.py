@@ -541,6 +541,150 @@ def _tld_country(email: str) -> str:
     return tld.upper() if len(tld) == 2 else ""
 
 
+def cmd_resend(args) -> int:
+    """Re-deliver the ORIGINAL email (no redraft) from a second account to
+    professors who never answered, and/or whose first mail bounced."""
+    import csv
+    from dataclasses import replace
+    from datetime import timedelta
+    from openpyxl import load_workbook
+
+    settings.ensure_dirs()
+    path = settings.require_target_xlsx(args.xlsx)
+    profile = parse_resume(settings.require_resume(args.resume))
+    log_path = settings.output_dir / "send_log.csv"
+    s = settings
+    alt = replace(
+        s, smtp_host=s.resend_smtp_host, smtp_port=s.resend_smtp_port,
+        smtp_security=s.resend_smtp_security, smtp_user=s.resend_smtp_user,
+        smtp_password=s.resend_smtp_password, smtp_from=s.resend_smtp_from,
+        reply_to="", daily_send_cap=args.limit or s.resend_daily_cap)
+    _h(f"RESEND ORIGINAL EMAILS FROM {alt.smtp_from or '?'} "
+       f"({'LIVE' if args.live else 'DRY RUN'})")
+    if args.live and not (alt.smtp_user and alt.smtp_password):
+        print(" ERROR: set RESEND_SMTP_USER and RESEND_SMTP_PASSWORD (an app password) in .env")
+        return 1
+
+    # Everyone already resent - from the log (authoritative) and the workbook.
+    done = set()
+    today = 0
+    if log_path.exists():
+        with log_path.open(newline="", encoding="utf-8") as fh:
+            for rec in csv.DictReader(fh):
+                if rec.get("mode") == "resend" and rec.get("status") == "sent":
+                    done.add(rec.get("email", "").strip().lower())
+                    if rec.get("time", "").startswith(f"{datetime.now():%Y-%m-%d}"):
+                        today += 1
+
+    wb = load_workbook(path, read_only=True, data_only=True)
+    resent_cells = set()
+    for ws in wb.worksheets:
+        hdr = _find_header_row(ws)
+        col = _column_index(ws, hdr).get("resent at")
+        if not col:
+            continue
+        for r, row in enumerate(ws.iter_rows(min_row=hdr + 1, values_only=True), hdr + 1):
+            if col - 1 < len(row) and row[col - 1]:
+                resent_cells.add((ws.title, r))
+    wb.close()
+
+    cutoff = datetime.now() - timedelta(days=args.min_days if args.min_days is not None
+                                        else s.resend_min_days)
+    want = {"bounced": args.who in ("all", "bounced"),
+            "none": args.who in ("all", "noreply")}
+    rows, skipped = [], Counter()
+    for r in load_for_sending(path, sheet=args.sheet):
+        if r["send_status"].lower() != "sent":
+            continue
+        kind = (r["reply_status"].split() or ["none"])[0].lower()
+        if kind in ("replied", "auto-reply"):
+            skipped["replied / auto-reply"] += 1
+            continue
+        if not want.get(kind, False):
+            skipped[f"not selected ({kind})"] += 1
+            continue
+        if r["email"].lower() in done or (r["sheet"], r["row"]) in resent_cells:
+            skipped["already resent"] += 1
+            continue
+        try:
+            first = datetime.strptime(r["sent_at"][:19], "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            first = None
+        if first and first > cutoff:
+            skipped["first email too recent"] += 1
+            continue
+        r["send_status"] = ""
+        rows.append(r)
+    # Bounced first: they are the ones who certainly never saw it.
+    rows.sort(key=lambda r: (not r["reply_status"].lower().startswith("bounced"),
+                             r["sent_at"]))
+    room = max(0, alt.daily_send_cap - today) if args.live else alt.daily_send_cap
+    print(f" Eligible: {len(rows)} | already resent today: {today} | this run: "
+          f"up to {min(room, len(rows))}")
+    for why, n in skipped.most_common():
+        print(_safe(f"   skipped {n:>4} x {why}"))
+    if not rows or not room:
+        return 0
+    alt.daily_send_cap = room
+
+    window = None
+    spec = args.local_window if args.local_window is not None else s.send_local_window
+    if spec and spec.lower() not in {"off", "none", "any"}:
+        window = SendWindow(spec, weekends=args.weekends)
+        for r in rows:
+            r["country"] = r.get("country") or _tld_country(r["email"])
+        print(f" Local window: {window.spec} recipient time"
+              f"{' - waiting for it' if args.wait else ' - others held for a later run'}")
+    if args.live and not args.yes and input(
+            f" Resend up to {min(room, len(rows))} original emails from {alt.smtp_from}? "
+            "[Y/N]: ").strip().lower() not in {"y", "yes"}:
+        print(" Aborted.")
+        return 2
+
+    def record(update):
+        if update["status"] != "sent":
+            return
+        src = next((r for r in rows if (r["sheet"], r["row"]) == (update["sheet"], update["row"])), {})
+        # Log first: it is what blocks a second resend even if the workbook is locked.
+        append_send_log(log_path, "resend", rows, [update])
+        try:
+            wb = load_workbook(path)
+            ws = wb[update["sheet"]]
+            hdr = _find_header_row(ws)
+            cols = _column_index(ws, hdr)
+            for name in ("Resent At", "Resent From", "Resend Message ID"):
+                if name.lower() not in cols:
+                    cols[name.lower()] = ws.max_column + 1
+                    ws.cell(row=hdr, column=cols[name.lower()], value=name)
+            ws.cell(row=update["row"], column=cols["resent at"], value=update["sent_at"])
+            ws.cell(row=update["row"], column=cols["resent from"], value=alt.smtp_from)
+            ws.cell(row=update["row"], column=cols["resend message id"],
+                    value=update.get("message_id", ""))
+            wb.save(path)
+        except OSError:
+            print(_safe(f"   ({path.name} locked; resend of {src.get('email')} is in "
+                        "send_log.csv and will not repeat)"))
+
+    def progress(i, total, row, result):
+        if result["status"] == "held":
+            return
+        print(_safe(f"  [{i}/{total}] {result['status']:<10} {row['email'][:40]:<40} "
+                    f"({(row['reply_status'] or 'no reply')[:22]})"))
+        if result["status"].startswith("failed"):
+            print(_safe(f"       -> {result.get('detail', '')[:140]}"))
+
+    with Mailer(alt, profile, dry_run=not args.live) as mailer:
+        updates = mailer.send_batch(rows, progress=progress, resend=True,
+                                    window=window, wait_for_window=args.wait,
+                                    on_update=record if args.live else None)
+    held = len(rows) - len(updates)
+    c = Counter(u["status"] for u in updates)
+    print(f"\n Done. {dict(c)}" + (f" | {held} not reached (cap/window)" if held else ""))
+    if not args.live:
+        print(" Dry run. Add --live to send.")
+    return 0
+
+
 def cmd_replies(args) -> int:
     from .replier import ThreadReader, draft_reply, load_queue, save_queue
     settings.ensure_dirs()
@@ -1259,6 +1403,25 @@ def build_parser() -> argparse.ArgumentParser:
     rp.add_argument("--weekends", action="store_true",
                     help="Allow the local window on Saturday/Sunday")
     rp.set_defaults(func=cmd_replies)
+
+    rs = sub.add_parser("resend",
+                        help="Re-deliver the original email from a second account "
+                             "(RESEND_SMTP_*) to bounced / unanswered professors")
+    rs.add_argument("--who", choices=["all", "bounced", "noreply"], default="all",
+                    help="bounced, noreply (sent, no answer), or all (default)")
+    rs.add_argument("--xlsx", help="Workbook containing the sent rows")
+    rs.add_argument("--sheet", help="Restrict to a single sheet name")
+    rs.add_argument("--resume", help="Path to resume")
+    rs.add_argument("--min-days", type=int,
+                    help="Skip if the first email is newer than this (default RESEND_MIN_DAYS=4)")
+    rs.add_argument("--limit", type=int, help="Max resends per day (default RESEND_DAILY_CAP)")
+    rs.add_argument("--local-window", metavar="H-H",
+                    help="Recipient local hours, e.g. 9-17 (default SEND_LOCAL_WINDOW)")
+    rs.add_argument("--wait", action="store_true", help="Wait for each window to open")
+    rs.add_argument("--weekends", action="store_true", help="Allow Saturday/Sunday")
+    rs.add_argument("--live", action="store_true", help="Actually send (default: dry run)")
+    rs.add_argument("--yes", action="store_true", help="Skip confirmation")
+    rs.set_defaults(func=cmd_resend)
 
     sy = sub.add_parser("check-replies",
                         help="Scan your mailbox (IMAP) for replies, auto-replies and bounces")

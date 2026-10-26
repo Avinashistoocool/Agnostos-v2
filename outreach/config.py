@@ -192,6 +192,16 @@ class Settings:
     # Recipient-local hours to send in, e.g. "9-11". Blank = any time.
     send_local_window: str = os.getenv("SEND_LOCAL_WINDOW", "")
 
+    # --- `resend`: re-deliver the original email from a second account ---
+    resend_smtp_host: str = os.getenv("RESEND_SMTP_HOST", "smtp.gmail.com")
+    resend_smtp_port: int = _i("RESEND_SMTP_PORT", 465)
+    resend_smtp_security: str = os.getenv("RESEND_SMTP_SECURITY", "ssl")
+    resend_smtp_user: str = os.getenv("RESEND_SMTP_USER", "")
+    resend_smtp_password: str = os.getenv("RESEND_SMTP_PASSWORD", "").replace(" ", "")
+    resend_smtp_from: str = os.getenv("RESEND_SMTP_FROM", "") or os.getenv("RESEND_SMTP_USER", "")
+    resend_daily_cap: int = _i("RESEND_DAILY_CAP", 100)
+    resend_min_days: int = _i("RESEND_MIN_DAYS", 4)
+
     # --- Reply tracking (`check-replies`). Defaults reuse the SMTP login. ---
     imap_host: str = os.getenv("IMAP_HOST", "")
     imap_port: int = _i("IMAP_PORT", 993)
