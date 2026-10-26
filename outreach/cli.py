@@ -503,6 +503,47 @@ def cmd_stats(args) -> int:
         for (mode, status), n in sorted(log.items()):
             print(_safe(f"   {n:>5}  {mode:<8} {status}"))
 
+    # Resends from the second account (`resend`) never touch Send Status.
+    resent_today = resent_all = 0
+    log_path = settings.output_dir / "send_log.csv"
+    if log_path.exists():
+        import csv
+        today = f"{datetime.now():%Y-%m-%d}"
+        with log_path.open(newline="", encoding="utf-8") as fh:
+            for rec in csv.DictReader(fh):
+                if rec.get("mode") == "resend" and rec.get("status") == "sent":
+                    resent_all += 1
+                    resent_today += rec.get("time", "").startswith(today)
+    if resent_all:
+        print(f"\n Resends (original email again from {settings.resend_smtp_from or 'second account'})")
+        print(f"   {resent_all:>5}  total   ({resent_today} today)")
+
+    # Follow-up replies live in reply_queue.json, not the workbook.
+    queue_path = settings.output_dir / "reply_queue.json"
+    if queue_path.exists():
+        try:
+            q = json.loads(queue_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            q = []
+        kinds = Counter()
+        for item in q:
+            kind = item.get("kind") or "reply"
+            if item.get("action") == "thank":
+                kind = "thank-you"
+            state = "sent" if item.get("sent_at") else (
+                "skipped (nothing to say)" if item.get("action") == "none" else
+                "approved, waiting" if item.get("approved") else "drafted, needs approval")
+            kinds[f"{kind:<10} {state}"] += 1
+        section("Replies & follow-ups we sent (reply_queue.json)", kinds)
+
+    replies_sent = 0
+    if queue_path.exists():
+        replies_sent = sum(1 for i in q if i.get("sent_at"))
+    print(f"\n Total emails delivered: {c['sent'] + resent_all + replies_sent} "
+          f"({c['sent']} first emails + {resent_all} resends + {replies_sent} replies)")
+    print(" (send_log.csv only started on 19 Oct, so its 'live' count is lower than "
+          "the workbook's; the workbook is the full record.)")
+
     llm = data["llm"]
     hints = []
     if llm.get("skipped: over max-professors cap"):

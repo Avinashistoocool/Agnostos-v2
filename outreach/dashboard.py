@@ -58,11 +58,23 @@ def render() -> str:
                 if rec.get("time", "").startswith(today):
                     today_mode[rec["mode"]] += 1
                     recent.append(rec)
+    # send_log.csv only exists from 19 Oct; the workbook is the full record.
+    wb_sent = wb_total = 0
+    try:
+        from .excel_io import load_for_sending
+        rows = load_for_sending(settings.target_xlsx)
+        wb_total = len(rows)
+        wb_sent = sum(1 for r in rows if r["send_status"].lower() == "sent")
+    except Exception:
+        pass
+    if wb_sent:
+        by_mode["live"] = max(by_mode["live"], wb_sent)
     lines = [f" AGNOSTOS DASHBOARD   {datetime.now():%d %b %H:%M:%S}   (Ctrl+C to close)",
              "=" * 78,
              f" Sent today:  first emails {today_mode['live']:>3}   |   "
              f"resends {today_mode['resend']:>3}/{settings.resend_daily_cap}",
-             f" All time:    first emails {by_mode['live']:>3}   |   resends {by_mode['resend']:>3}",
+             f" All time:    first emails {by_mode['live']:>3}   |   resends {by_mode['resend']:>3}"
+             f"   |   drafted, not yet sent {max(0, wb_total - wb_sent):>3}",
              "", " Running jobs:"]
     jobs = _running()
     lines += [f"   * {j[:72]}" for j in jobs] or ["   (none)"]
