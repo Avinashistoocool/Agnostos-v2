@@ -266,6 +266,48 @@ def _variants(tokens: list[str]) -> set[str]:
     return {v for v in out if len(v) >= 2}
 
 
+def given_name_conflict(name: str, email: str) -> bool:
+    """True when the address names a DIFFERENT given name than this person's.
+
+    francesco.vicentini for Filippo Vicentini, alberto.pardo for C. Domingo-Pardo,
+    cengiz.tuysuz for Cenk Tuysuz: the surname matches, so name_match() scores
+    them 0.75, but they are other people at the same institution.
+    """
+    if "@" not in email:
+        return False
+    local = _ascii_fold(email.split("@")[0])
+    parts = [re.sub(r"\d+", "", p) for p in re.split(r"[._\-+]", local)]
+    parts = [p for p in parts if p]
+    if len(parts) < 2:
+        return False
+    raw = _ascii_fold(re.sub(r"[()]", " ", name or ""))
+    words = [w for w in re.split(r"[^a-z]+", raw) if w]
+    full = [w for w in words if len(w) > 1]
+    initials = {w[0] for w in words}
+    surnames = set(full[1:]) | ({full[-1]} if full else set())
+    for g in parts:
+        if len(g) < 3 or any(g == s or (len(s) >= 4 and s in g) for s in surnames):
+            continue
+        if any(t.startswith(g) or g.startswith(t) for t in full):
+            continue
+        # Name given only as initials ("R.A. Cooper"): richard.cooper is fine.
+        if g[0] in initials and any(len(w) == 1 for w in words):
+            continue
+        return True
+    return False
+
+
+_GENERIC_TLDS = {"com", "org", "net", "edu", "eu", "int", "gov", "info", "io", "ai"}
+
+
+def country_mismatch(country: str, email: str) -> bool:
+    """Address on another country's domain (cengiz@usak.edu.tr for a DESY row)."""
+    tld = domain_of(email).rsplit(".", 1)[-1].lower()
+    want = (country or "").strip().lower()
+    want = {"gb": "uk"}.get(want, want)
+    return bool(len(want) == 2 and len(tld) == 2 and tld not in _GENERIC_TLDS and tld != want)
+
+
 def name_match(name: str, email: str) -> float:
     """0..1 confidence that this local part belongs to this person.
 
@@ -747,7 +789,10 @@ class EmailFinder:
             host = urllib.parse.urlparse(url).netloc.lower().removeprefix("www.")
             for email in self._emails_in(self._fetch(url)):
                 nm = name_match(prof.name, email)
-                if nm < 0.75:
+                if nm < 0.75 or given_name_conflict(prof.name, email):
+                    continue
+                # A surname-only match on another country's domain is someone else.
+                if nm < 1.0 and country_mismatch(prof.country, email):
                     continue
                 dom = domain_of(email)
                 score = nm

@@ -643,6 +643,10 @@ def cmd_resend(args) -> int:
         if kind in ("replied", "auto-reply"):
             skipped["replied / auto-reply"] += 1
             continue
+        if r["email_status"] == "invalid":
+            # Hard bounce / wrong person: sending the same text again can't work.
+            skipped["address known bad (see FAILURES.json)"] += 1
+            continue
         if not want.get(kind, False):
             skipped[f"not selected ({kind})"] += 1
             continue
@@ -986,6 +990,25 @@ def cmd_conversations(args) -> int:
     if not args.no_open:
         import webbrowser
         webbrowser.open(out.resolve().as_uri())
+    return 0
+
+
+def cmd_replace_failed(args) -> int:
+    """Swap unreachable / wrong-person professors for a colleague in the same department."""
+    from .replace import replace_failed
+    settings.ensure_dirs()
+    path = settings.require_target_xlsx(args.xlsx)
+    fp = settings.output_dir / "FAILURES.json"
+    _h("REPLACE UNREACHABLE PROFESSORS WITH A COLLEAGUE")
+    if not fp.exists():
+        print(" output/FAILURES.json not found; run `failures` first.")
+        return 1
+    if not is_writable(path):
+        print(_safe(f" ERROR: {path.name} is open in Excel. Close it and re-run."))
+        return 1
+    res = replace_failed(settings, path, fp, limit=args.per_failure)
+    print(f"\n Added {res['added']} colleague(s). Next: verify --repair --apply --only-missing, "
+          "run --mode list, send.")
     return 0
 
 
@@ -1760,6 +1783,14 @@ def build_parser() -> argparse.ArgumentParser:
     cv.add_argument("--xlsx", help="Workbook containing the sent rows")
     cv.add_argument("--no-open", action="store_true", help="Don't open it in the browser")
     cv.set_defaults(func=cmd_conversations)
+
+    rf = sub.add_parser("replace-failed",
+                        help="Mark bounced/wrong-person addresses invalid and add a colleague "
+                             "from the same department for each")
+    rf.add_argument("--xlsx", help="Workbook (default TARGET_XLSX)")
+    rf.add_argument("--per-failure", type=int, default=1,
+                    help="Colleagues to add per unreachable professor (default 1)")
+    rf.set_defaults(func=cmd_replace_failed)
 
     ca = sub.add_parser("calendar-auth",
                         help="One-time Google Calendar sign-in for meeting holds")

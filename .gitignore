@@ -27,3 +27,6 @@ copilot-debug-logs-*
 .vscode/
 .idea/
 .DS_Store
+
+# per-run reports with third-party contact data
+FAILURES.json
