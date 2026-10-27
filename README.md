@@ -327,6 +327,21 @@ python -m outreach.cli archive-sent --live      # copy everything already sent i
 - **`conversations`** builds one searchable page with every thread in order: your first email (exactly as sent), resends from the second account, the professor's replies, bounces, your replies and follow-ups, and drafts still waiting to go out. You can filter by state (`awaiting you`, `replied`, `bounced`, `draft pending`...). Re-run it any time to refresh.
 - **`archive-sent`** backfills the IITD **Sent** folder (with the original Message-ID and Date) so Outlook/Thunderbird/webmail show full threads. It remembers what it copied (`output/archived_sent.json`), so re-running never duplicates. From now on, every email sent over SMTP is also copied to Sent automatically (`SAVE_TO_SENT=true`; Gmail already does this itself).
 
+### `legacy` — write to the leading researchers in your field
+
+```bash
+python -m outreach.cli legacy --find --include "Neil deGrasse Tyson; Fabiola Gianotti"   # build output/legacy.xlsx
+python -m outreach.cli legacy --draft                     # one aspiring-scientist letter each
+python -m outreach.cli legacy --send                      # dry run
+python -m outreach.cli legacy --send --live               # send approved letters from RESEND_SMTP_* (your Gmail)
+```
+
+`legacy` finds high-impact, still-active researchers in your topics (`--topics`, worldwide by default, `--min-h 60`), plus anyone you name with `--include`. It keeps only physicists and fetches their own small-team papers, so a letter never credits them with a 3,000-author collaboration paper. Addresses come from the same strict finder as `verify`, and an address at an unrelated institution or a non-academic domain is rejected. Public figures with no published address are listed with a note to use their official contact page.
+
+The letter is different from an internship request. It's a short, specific, humble note: one idea of theirs that shaped your thinking, one real project of yours, and a small ask, either a summer visit through a real route (CERN/DESY summer student programmes, DAAD WISE, Mitacs, Charpak, EPFL/ETH summer programmes, Caltech SURF, or their own group) or a pointer to someone who could help. It never invents how you found their work.
+
+Review `output/legacy.xlsx` and set **Approved = yes** for each letter you want to send. `--approve-all` covers only addresses the finder verified; addresses typed in by hand must be approved row by row. Sends are spaced 2-5 minutes apart, 10 per run (`--limit`).
+
 ### `resend` — re-deliver the original email from a second account
 
 ```bash
