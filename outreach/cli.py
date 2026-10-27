@@ -1451,6 +1451,29 @@ def cmd_verify(args) -> int:
     professors = load_targets(path, sheet=args.sheet)
     if not args.include_sent:
         professors = _drop_sent(path, professors)
+    if args.only_missing:
+        # Rows that already have a checked address don't need another web search.
+        before = len(professors)
+        professors = [p for p in professors if not (p.email or "").strip()]
+        print(f" --only-missing: {before - len(professors)} rows already have an "
+              "address; looking up the rest.")
+        # Never-searched rows (e.g. fresh `discover` output) first; rows that
+        # already failed a search are the least likely to succeed now.
+        from openpyxl import load_workbook
+        tried = set()
+        wb = load_workbook(path, read_only=True, data_only=True)
+        for ws in wb.worksheets:
+            hdr = _find_header_row(ws)
+            col = _column_index(ws, hdr).get("email status")
+            if not col:
+                continue
+            for r, row in enumerate(ws.iter_rows(min_row=hdr + 1, values_only=True), hdr + 1):
+                if col - 1 < len(row) and row[col - 1]:
+                    tried.add((ws.title, r))
+        wb.close()
+        professors.sort(key=lambda p: (p.source_sheet, p.source_row) in tried)
+        fresh = sum(1 for p in professors if (p.source_sheet, p.source_row) not in tried)
+        print(f" {fresh} never searched (done first), {len(professors) - fresh} retried after.")
     if args.top:
         # Rank like `send` does: by the tool's Probability of Acceptance,
         # falling back to a hand-typed Probability column.
@@ -1742,6 +1765,8 @@ def build_parser() -> argparse.ArgumentParser:
     sv.add_argument("--include-sent", action="store_true",
                     help="Also check rows already marked sent (skipped by default)")
     sv.add_argument("--workers", type=int, help="Parallel lookups (default VERIFY_WORKERS=4)")
+    sv.add_argument("--only-missing", action="store_true",
+                    help="Only look up rows with no email address yet")
     sv.add_argument("--dry-run", action="store_true",
                     help="Report only, do not touch the workbook")
     sv.add_argument("--no-backup", action="store_true", help="Do not back up the workbook")
