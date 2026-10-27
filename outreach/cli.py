@@ -1037,6 +1037,124 @@ def cmd_replace_failed(args) -> int:
     return 0
 
 
+def cmd_legacy(args) -> int:
+    """Eminent researchers in your field + an aspiring-scientist letter, sent from your Gmail."""
+    from dataclasses import replace
+    from email.utils import make_msgid
+    from . import legacy as L
+    from .discover import Discoverer, resolve_countries
+    settings.ensure_dirs()
+    path = settings.output_dir / "legacy.xlsx"
+    rows = L.load(path)
+    profile = parse_resume(settings.require_resume(args.resume))
+
+    if args.find or not rows:
+        _h("LEGACY RESEARCHERS: FIND")
+        topics = split_queries(args.topics or "particle physics; high energy physics phenomenology; "
+                               "machine learning for particle physics; cosmology; "
+                               "quantum field theory; astrophysics")
+        disc = Discoverer(mailto=settings.openalex_mailto, api_key=settings.openalex_api_key,
+                          cache_path=settings.output_dir / "discover_cache.json")
+        legends = L.search_legends(disc, topics, resolve_countries(args.countries or ""),
+                                   args.min_h, args.per_topic, datetime.now().year - 2)
+        named = split_queries(args.include or "")
+        if named:
+            legends += L.lookup_named(disc, named)
+        have = {(r.get("OpenAlex ID") or r.get("Name") or "").lower() for r in rows}
+        legends = [lg for lg in legends if (lg.openalex_id or lg.name).lower() not in have]
+        print(f" {len(legends)} new candidates. Fetching recent work...")
+        L.add_recent_work(disc, legends)
+        named_ids = {lg.openalex_id for lg in legends if lg.source == "you named them"}
+        before = len(legends)
+        # People you named are always kept; the rest must actually be physicists.
+        legends = [lg for lg in legends if lg.openalex_id in named_ids or L.is_physics(lg)]
+        print(f" Physics filter: kept {len(legends)} of {before}.")
+        disc.save_cache()
+        print(" Looking up public addresses (strict name checks)...")
+        L.find_emails(legends, workers=args.workers)
+        rows = L.merge(rows, legends)
+        L.save(path, rows)
+        ok = sum(1 for r in rows if r.get("Email"))
+        print(f" {len(rows)} in {path.name}; {ok} with a verified address.")
+        for r in rows[:25]:
+            print(_safe(f"   h={str(r.get('h-index')):>3}  {str(r.get('Name'))[:28]:<28} "
+                        f"{str(r.get('Institution'))[:34]:<34} {r.get('Email') or '-- no address'}"))
+
+    if args.draft:
+        _h("LEGACY RESEARCHERS: DRAFT")
+        settings.require_api_key()
+        ev = LLMEvaluator(settings, profile)
+        n = 0
+        for r in rows:
+            if not r.get("Email") or r.get("Draft") or r.get("Send Status") == "sent":
+                continue
+            try:
+                r["Subject"], r["Draft"] = L.draft(ev, settings, profile, r, args.summer)
+                r["Why them"] = r.get("Source", "")
+                n += 1
+                print(_safe(f"\n  == {r['Name']} ({r['Institution']})\n  Subject: {r['Subject']}"))
+                for line in r["Draft"].splitlines():
+                    print(_safe("  | " + line))
+            except Exception as exc:
+                print(_safe(f"  ! {r['Name']}: {exc}"))
+            L.save(path, rows)
+        print(f"\n {n} letter(s) drafted. {ev.usage_report()}")
+        print(f" Read them in {path}, set Approved = yes for the ones you want, then:")
+        print("   python -m outreach.cli legacy --send            # dry run")
+        print("   python -m outreach.cli legacy --send --live     # send from your Gmail")
+
+    if args.send:
+        _h(f"LEGACY RESEARCHERS: SEND ({'LIVE' if args.live else 'DRY RUN'})")
+        s = settings
+        alt = replace(s, smtp_host=s.resend_smtp_host, smtp_port=s.resend_smtp_port,
+                      smtp_security=s.resend_smtp_security, smtp_user=s.resend_smtp_user,
+                      smtp_password=s.resend_smtp_password, smtp_from=s.resend_smtp_from,
+                      reply_to="")
+        def approved(r):
+            return str(r.get("Approved") or "").strip().lower() in {"y", "yes", "true", "1", "x"}
+        # --approve-all only covers addresses the finder verified; anything typed in
+        # by hand or unverified must be approved row by row.
+        todo = [r for r in rows if r.get("Draft") and r.get("Email")
+                and r.get("Send Status") != "sent" and "[FILL" not in r["Draft"]
+                and (approved(r) or (args.approve_all and r.get("Email Status") == "ok"))]
+        held = [r for r in rows if r.get("Draft") and r.get("Email") and r not in todo
+                and r.get("Send Status") != "sent"]
+        for r in held:
+            print(_safe(f"  held: {r['Name']} <{r['Email']}> (status {r.get('Email Status')}; "
+                        "set Approved = yes after checking)"))
+        todo = todo[:args.limit]
+        if not todo:
+            print(" Nothing approved. Set Approved = yes in legacy.xlsx (or pass --approve-all).")
+            return 0
+        print(f" From {alt.smtp_from} to {len(todo)} researcher(s).")
+        if args.live and not args.yes and input(" Send now? [Y/N]: ").strip().lower() not in {"y", "yes"}:
+            print(" Aborted.")
+            return 2
+        import random, time
+        with Mailer(alt, profile, dry_run=not args.live) as mailer:
+            for i, r in enumerate(todo):
+                msg = mailer.build_message(r["Email"], r["Name"], r["Subject"], r["Draft"])
+                try:
+                    mailer.deliver(msg)
+                    if args.live:
+                        r["Send Status"], r["Sent At"] = "sent", f"{datetime.now():%Y-%m-%d %H:%M:%S}"
+                        r["Message ID"] = msg["Message-ID"]
+                        append_send_log(settings.output_dir / "send_log.csv", "legacy",
+                                        [{"sheet": "legacy", "row": i, "email": r["Email"],
+                                          "name": r["Name"]}],
+                                        [{"sheet": "legacy", "row": i, "status": "sent",
+                                          "sent_at": r["Sent At"]}])
+                    status = "sent" if args.live else "dry-run"
+                except Exception as exc:
+                    status = f"failed: {type(exc).__name__}"
+                    r["Send Status"] = status
+                print(_safe(f"  {status:<10} {r['Name'][:30]:<30} {r['Email']}"))
+                L.save(path, rows)
+                if args.live and i < len(todo) - 1:
+                    Mailer._countdown(random.uniform(120, 300), "next letter")
+    return 0
+
+
 def cmd_replies(args) -> int:
     from .replier import ThreadReader, draft_reply, load_queue, plan_meeting, save_queue
     settings.ensure_dirs()
@@ -1820,6 +1938,28 @@ def build_parser() -> argparse.ArgumentParser:
     rf.add_argument("--per-failure", type=int, default=1,
                     help="Colleagues to add per unreachable professor (default 1)")
     rf.set_defaults(func=cmd_replace_failed)
+
+    lg = sub.add_parser("legacy", aliases=["legacy-researchers"],
+                        help="Eminent researchers in your field + a humble aspiring-scientist "
+                             "letter, sent from your personal Gmail (RESEND_SMTP_*)")
+    lg.add_argument("--find", action="store_true", help="Search for candidates (default on first run)")
+    lg.add_argument("--topics", help="';'-separated fields (default: particle physics, HEP pheno, "
+                                     "ML for particle physics, cosmology, QFT, astrophysics)")
+    lg.add_argument("--include", metavar="NAMES",
+                    help="People you name yourself, e.g. \"Neil deGrasse Tyson; Fabiola Gianotti\"")
+    lg.add_argument("--countries", help="Restrict region (default: worldwide)")
+    lg.add_argument("--min-h", type=int, default=60, help="Minimum h-index (default 60)")
+    lg.add_argument("--per-topic", type=int, default=8, help="Candidates per topic (default 8)")
+    lg.add_argument("--workers", type=int, default=4, help="Parallel email lookups")
+    lg.add_argument("--draft", action="store_true", help="Write a letter for each with an address")
+    lg.add_argument("--summer", default="2027", help="Which summer (default 2027)")
+    lg.add_argument("--send", action="store_true", help="Send approved letters")
+    lg.add_argument("--approve-all", action="store_true", help="Treat every drafted letter as approved")
+    lg.add_argument("--limit", type=int, default=10, help="Max letters per run (default 10)")
+    lg.add_argument("--live", action="store_true", help="With --send: actually send")
+    lg.add_argument("--yes", action="store_true", help="Skip confirmation")
+    lg.add_argument("--resume", help="Path to resume")
+    lg.set_defaults(func=cmd_legacy)
 
     ca = sub.add_parser("calendar-auth",
                         help="One-time Google Calendar sign-in for meeting holds")
