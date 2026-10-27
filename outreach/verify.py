@@ -299,6 +299,40 @@ def given_name_conflict(name: str, email: str) -> bool:
 
 _GENERIC_TLDS = {"com", "org", "net", "edu", "eu", "int", "gov", "info", "io", "ai"}
 
+_DOMAIN_SKIP = {"ac", "edu", "co", "uni", "www", "mail", "physics", "phys", "astro", "cs",
+                "staff", "research", "dept", "student", "students", "com", "org", "net"}
+_INST_STOP = {"university", "universit", "universita", "universidad", "universitat",
+              "institute", "institut", "of", "the", "and", "for", "de", "di", "der", "la",
+              "national", "technical", "technology", "college", "school", "sciences", "science"}
+
+
+def institution_domain_match(institution: str, domain: str) -> bool:
+    """Does the mail domain spell the institution? (ox.ac.uk ~ Oxford, kit.edu ~ KIT,
+    uni-heidelberg.de ~ Heidelberg University, cern.ch ~ CERN)."""
+    import unicodedata
+    inst = unicodedata.normalize("NFKD", institution or "").encode("ascii", "ignore").decode()
+    words = [w.lower() for w in re.findall(r"[A-Za-z]{3,}", inst)]
+    key = {w for w in words if w not in _INST_STOP}
+    initials = "".join(w[0] for w in re.findall(r"[A-Za-z]+", inst) if w[0].isupper()).lower()
+    labels = [l for l in re.split(r"[.\-]", (domain or "").lower()) if len(l) >= 2
+              and l not in _DOMAIN_SKIP]
+    if not key or not labels:
+        return False
+    # Well-known short forms the letters alone can't reveal.
+    alias = {"cern": "nuclear", "bham": "birmingham", "ucl": "college", "lse": "economics",
+             "epfl": "lausanne", "ethz": "zurich", "tum": "munich", "lmu": "munchen",
+             "kcl": "king", "qmul": "mary", "dur": "durham", "ed": "edinburgh",
+             "gla": "glasgow", "cam": "cambridge"}
+    for l in labels:
+        if l in key or (len(initials) >= 3 and l == initials) or alias.get(l) in key:
+            return True
+        # ox -> oxford, wisc -> wisconsin: a short label that starts a key word.
+        if len(l) >= 2 and any(w.startswith(l) for w in key if len(w) >= 4):
+            return True
+        if len(l) >= 4 and any(l.startswith(w) for w in key if len(w) >= 4):
+            return True
+    return False
+
 
 def country_mismatch(country: str, email: str) -> bool:
     """Address on another country's domain (cengiz@usak.edu.tr for a DESY row)."""
@@ -612,9 +646,14 @@ class EmailFinder:
         try:
             with urllib.request.urlopen(req, timeout=self.timeout,
                                         context=_SSL) as resp:
-                raw = resp.read(600_000)
-                charset = resp.headers.get_content_charset() or "utf-8"
-                text = raw.decode(charset, errors="replace")
+                ctype = (resp.headers.get_content_type() or "").lower()
+                raw = resp.read(4_000_000 if "pdf" in ctype else 600_000)
+                if "pdf" in ctype or raw[:5] == b"%PDF-":
+                    # Papers (arXiv etc.) print the authors' addresses on page 1.
+                    text = _pdf_text(raw)
+                else:
+                    charset = resp.headers.get_content_charset() or "utf-8"
+                    text = raw.decode(charset, errors="replace")
         except Exception:
             text = ""
         self._page_cache[url] = text
@@ -780,6 +819,7 @@ class EmailFinder:
                 break
 
         best: tuple[float, str, str] = (0.0, "", "")
+        seen_on: dict[str, set[str]] = {}
         # The row's profile URL, when discovery filled it in, is the
         # institution's own domain as published by ROR - real data about this
         # person's employer, not a guess about how a university spells itself.
@@ -795,20 +835,38 @@ class EmailFinder:
                 if nm < 1.0 and country_mismatch(prof.country, email):
                     continue
                 dom = domain_of(email)
+                seen_on.setdefault(email.lower(), set()).add(host)
                 score = nm
                 if same_site(dom, host):
                     score += 1.0          # published on the site that owns it
                 elif inst_host and same_site(dom, inst_host):
                     score += 0.75         # their employer's domain, seen elsewhere
+                elif nm >= 1.0 and institution_domain_match(prof.institution, dom):
+                    score += 0.5          # exact name at a domain that spells their employer
                 if is_academic(dom):
                     score += 0.5
                 if label == "profile page":
                     score += 0.25
+                # Exact name, academic domain, printed on two unrelated sites
+                # (e.g. an arXiv paper and a group page): independent agreement.
+                if nm >= 1.0 and is_academic(dom) and len(seen_on[email.lower()]) >= 2:
+                    score = max(score, 2.0)
                 if score > best[0]:
                     best = (score, email, f"{label}: {host}")
             if best[0] >= 2.0:            # name + own domain + academic: done
                 break
         return best[1], best[2], best[0]
+
+
+def _pdf_text(raw: bytes, pages: int = 2) -> str:
+    """Text of the first pages of a PDF ('' if unreadable)."""
+    try:
+        import io
+        import pdfplumber
+        with pdfplumber.open(io.BytesIO(raw)) as pdf:
+            return "\n".join((p.extract_text() or "") for p in pdf.pages[:pages])
+    except Exception:
+        return ""
 
 
 _CACHE_LOCK = threading.Lock()
