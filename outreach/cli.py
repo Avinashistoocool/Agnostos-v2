@@ -1313,7 +1313,10 @@ def cmd_discover(args) -> int:
             existing=existing + excluded, state_path=state_path,
             mailto=settings.openalex_mailto, api_key=settings.openalex_api_key,
             cache_path=settings.output_dir / "discover_cache.json",
-            top_universities=top_n, prestige_weight=prestige, on_top_unis=on_top_unis,
+            top_universities=top_n, prestige_weight=prestige,
+            also_universities=split_queries(args.also_universities
+                                            or settings.discover_also_universities),
+            on_top_unis=on_top_unis,
             on_batch_start=on_start, on_page=on_page):
         if res.error:
             print(f" ! {res.error}")
@@ -1691,6 +1694,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="With --top-universities: how much university rank counts "
                          "against topic fit. 0 = fit only, 1 = balanced (default), "
                          "3 = mostly prestige")
+    sd.add_argument("--also-universities", metavar="NAMES",
+                    help="';'-separated universities to include too, e.g. "
+                         "\"TU Berlin; EPFL\" (default DISCOVER_ALSO_UNIVERSITIES)")
     sd.add_argument("--list-universities", action="store_true",
                     help="Just print the top universities for --countries and exit")
     sd.add_argument("--output",

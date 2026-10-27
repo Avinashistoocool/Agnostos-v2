@@ -333,6 +333,25 @@ class Discoverer:
             self.cache[key] = out
         return out
 
+    def find_universities(self, names: list[str]) -> list[dict]:
+        """Resolve university names ("TU Berlin", "Imperial") to OpenAlex records."""
+        out = []
+        for name in names:
+            key = f"uniname::{name.strip().lower()}"
+            hit = self.cache.get(key)
+            if hit is None:
+                data = self._api("/institutions", {
+                    "search": name.strip(), "filter": "type:education", "per-page": 1,
+                    "select": "id,display_name,country_code"}) or {}
+                rows = data.get("results") or []
+                hit = ({"id": rows[0]["id"], "name": rows[0].get("display_name", ""),
+                        "country": (rows[0].get("country_code") or "").upper(), "papers": 0}
+                       if rows else {})
+                self.cache[key] = hit
+            if hit:
+                out.append(hit)
+        return out
+
     @staticmethod
     def _is_uni(row: dict, countries: list[str]) -> bool:
         return (row.get("type") == "education"

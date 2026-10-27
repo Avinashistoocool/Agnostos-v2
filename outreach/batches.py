@@ -238,7 +238,8 @@ def run_batches(queries: list[str], count: int = 1000, batches: int = 4,
                 cache_path: Path | None = None, carry_shortfall: bool = True,
                 inst_types: list[str] | None = None, resolve_domains: bool = True,
                 min_relevance: float = 0.1, top_universities: int = 0,
-                prestige_weight: float = 1.0, on_top_unis=None,
+                prestige_weight: float = 1.0, also_universities: list[str] | None = None,
+                on_top_unis=None,
                 on_batch_start=None, on_page=None, on_batch_done=None):
     """Run (or resume) the whole plan. Yields `(professors, BatchResult)` per batch.
 
@@ -254,13 +255,22 @@ def run_batches(queries: list[str], count: int = 1000, batches: int = 4,
         extra["inst_types"] = sorted(inst_types)
     if top_universities:
         extra["top_universities"] = top_universities
+    if also_universities:
+        extra["also_universities"] = sorted(also_universities)
     fp = fingerprint(queries, count, batches, codes, since_year, min_h_index,
                      min_works, extra)
     state = BatchState.load(state_path, fp) if state_path else BatchState(fingerprint=fp)
     disc = Discoverer(mailto=mailto, api_key=api_key, cache_path=cache_path)
     top_unis = None
-    if top_universities:
-        top_unis = disc.top_universities(codes, top_universities, since_year)
+    if top_universities or also_universities:
+        top_unis = disc.top_universities(codes, top_universities, since_year) \
+            if top_universities else []
+        seen = {u["id"] for u in top_unis}
+        # Named universities rank alongside the top ones (inserted mid-table).
+        for u in disc.find_universities(also_universities or []):
+            if u["id"] not in seen:
+                top_unis.insert(min(len(top_unis), 10), u)
+                seen.add(u["id"])
         if on_top_unis:
             on_top_unis(top_unis, disc.last_error)
         if not top_unis:
