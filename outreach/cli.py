@@ -184,6 +184,12 @@ def cmd_run(args) -> int:
         # Rewriting a sent row's draft would lose the record of what was
         # actually mailed (and re-sends/follow-ups must use that text).
         professors = _drop_sent(xlsx, professors)
+        if settings.focus and not args.no_focus:
+            from .focus import in_focus
+            before = len(professors)
+            professors = [p for p in professors if in_focus(p, settings.focus_keywords)]
+            print(f" Focus (physics/HEP): keeping {len(professors)} of {before} rows; "
+                  "set FOCUS=false or pass --no-focus to draft everyone.")
     if not professors:
         print(" No professors found. Aborting.")
         return 1
@@ -289,6 +295,17 @@ def cmd_run(args) -> int:
     return 0
 
 
+def _focus_text(path) -> dict:
+    """(sheet,row) -> fields used by focus.in_focus."""
+    out = {}
+    for p in load_targets(path):
+        out[(p.source_sheet, p.source_row)] = {
+            "research_area": p.research_area, "institution": p.institution,
+            "department": getattr(p, "department", ""),
+            "recent_works": " ".join(p.recent_works or [])}
+    return out
+
+
 def cmd_send(args) -> int:
     settings.ensure_dirs()
     if args.delay_min is not None:
@@ -303,6 +320,14 @@ def cmd_send(args) -> int:
     path = settings.require_target_xlsx(args.xlsx)
     profile = parse_resume(settings.require_resume(args.resume))
     rows = load_for_sending(path, sheet=args.sheet)
+    if settings.focus and not args.no_focus:
+        from .focus import in_focus
+        focus_text = _focus_text(path)
+        before = len(rows)
+        rows = [r for r in rows if r["send_status"].lower() == "sent"
+                or in_focus(focus_text.get((r["sheet"], r["row"]), {}), settings.focus_keywords)]
+        if before != len(rows):
+            print(f" Focus (physics/HEP): holding back {before - len(rows)} off-topic draft(s).")
 
     window = None
     window_spec = args.local_window if args.local_window is not None else settings.send_local_window
@@ -1701,6 +1726,8 @@ def build_parser() -> argparse.ArgumentParser:
     sr.add_argument("--no-profile-hop", action="store_true",
                     help="Mode A: do not visit individual profile pages for emails")
     sr.add_argument("--no-backup", action="store_true", help="Do not back up the workbook")
+    sr.add_argument("--no-focus", action="store_true",
+                    help="Ignore FOCUS and include rows outside your field")
     sr.add_argument("--yes", action="store_true", help="Skip the [Y/N] cost gate")
     sr.set_defaults(func=cmd_run)
 
@@ -1739,6 +1766,8 @@ def build_parser() -> argparse.ArgumentParser:
                          "opens instead of holding them for a later run")
     ss.add_argument("--weekends", action="store_true",
                     help="Allow the local window on Saturday/Sunday")
+    ss.add_argument("--no-focus", action="store_true",
+                    help="Ignore FOCUS and include rows outside your field")
     ss.add_argument("--yes", action="store_true",
                     help="Skip the [Y/N] confirmation (for Task Scheduler / cron)")
     ss.set_defaults(func=cmd_send)
