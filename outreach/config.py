@@ -221,6 +221,8 @@ class Settings:
     imap_user: str = os.getenv("IMAP_USER", "")
     imap_password: str = os.getenv("IMAP_PASSWORD", "")
     imap_folders: str = os.getenv("IMAP_FOLDERS", "INBOX;SPAM;Junk;Junk Email")
+    # Copy every email sent over SMTP into the IMAP Sent folder so mail apps show full threads.
+    save_to_sent: bool = _b("SAVE_TO_SENT", True)
 
     # --- Scraper ---
     proxy_server: str = os.getenv("PROXY_SERVER", "")

@@ -160,6 +160,15 @@ class Mailer:
             return
         self._deliver(msg)
         self.sent_count += 1
+        self._archive(msg)
+
+    def _archive(self, msg: EmailMessage) -> None:
+        """Copy to the IMAP Sent folder so the thread is complete in mail apps."""
+        try:
+            from .mailbox import save_copy
+            save_copy(self.s, msg)
+        except Exception as exc:
+            print(f"    (could not copy to Sent folder: {type(exc).__name__}: {exc})"[:160])
 
     # ---------- message ----------
     def build_message(self, to_email: str, to_name: str, subject: str,
@@ -211,6 +220,8 @@ class Mailer:
         try:
             self._deliver(msg)
             self.sent_count += 1
+            if not self.redirect_to:
+                self._archive(msg)
             status = "review-sent" if self.redirect_to else "sent"
             return {"status": status, "detail": "", "message": msg}
         except Exception as exc:

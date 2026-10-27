@@ -894,6 +894,101 @@ def cmd_calendar_auth(args) -> int:
     return 0
 
 
+def cmd_archive_sent(args) -> int:
+    """Backfill the IMAP Sent folder with every email we sent over SMTP."""
+    from email.utils import format_datetime, make_msgid
+    from .mailbox import SentArchiver
+    from .replier import load_queue
+    settings.ensure_dirs()
+    path = settings.require_target_xlsx(args.xlsx)
+    profile = parse_resume(settings.require_resume(args.resume))
+    mailer = Mailer(settings, profile, dry_run=True)
+    _h("COPY SENT EMAILS INTO YOUR SENT FOLDER")
+    items = []
+    for r in load_for_sending(path):
+        if r["send_status"].lower() != "sent":
+            continue
+        try:
+            when = datetime.strptime(r["sent_at"][:19], "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            when = None
+        msg = mailer.build_message(r["email"], r.get("name", ""),
+                                   r.get("subject") or "Summer research internship enquiry",
+                                   r["body"])
+        items.append((msg, when, r.get("message_id", ""), "first"))
+    for q in load_queue(settings.output_dir / "reply_queue.json"):
+        if not q.get("sent_at") or not q.get("body"):
+            continue
+        when = datetime.strptime(q["sent_at"][:19], "%Y-%m-%d %H:%M:%S")
+        try:
+            msg = mailer.build_reply(q["email"], q.get("name", ""), q["subject"], q["body"],
+                                     q.get("in_reply_to", ""), q.get("references", ""))
+        except ValueError:
+            continue
+        items.append((msg, when, q.get("message_id", ""), q.get("kind", "reply")))
+    # Remember what was copied: replies (and a few early sends) have no stored
+    # Message-ID, so the IMAP duplicate check alone can't catch a re-run.
+    done_path = settings.output_dir / "archived_sent.json"
+    done = set(json.loads(done_path.read_text(encoding="utf-8"))) if done_path.exists() else set()
+    def akey(msg, when):
+        from email.utils import parseaddr
+        return f"{parseaddr(str(msg['To']))[1].lower()}|{when:%Y-%m-%d %H:%M:%S}" if when else ""
+    items = [it for it in items if akey(it[0], it[1]) not in done]
+    print(f" {len(items)} sent emails to copy (first emails + replies); "
+          f"{len(done)} copied on earlier runs.")
+    if not args.live:
+        print(" Dry run. Add --live to copy them into your Sent folder.")
+        return 0
+    added = skipped = failed = 0
+    with SentArchiver(settings) as arc:
+        print(_safe(f" Mailbox {arc.user} @ {arc.host}, folder '{arc.folder}'"))
+        for i, (msg, when, mid, kind) in enumerate(items, 1):
+            # Keep the original Message-ID so replies thread under it.
+            if mid:
+                del msg["Message-ID"]
+                msg["Message-ID"] = mid
+            if when:
+                del msg["Date"]
+                msg["Date"] = format_datetime(when.astimezone())
+            # Attachments were sent but aren't needed to read the thread.
+            if msg.is_multipart():
+                plain = msg.get_body(("plain",)).get_content()
+                for h in ("Content-Type", "Content-Transfer-Encoding", "MIME-Version"):
+                    del msg[h]
+                msg.set_content(plain)
+            try:
+                if arc.append(msg, when):
+                    added += 1
+                else:
+                    skipped += 1
+                if akey(msg, when):
+                    done.add(akey(msg, when))
+            except Exception as exc:
+                failed += 1
+                print(_safe(f"  ! {msg['To']}: {exc}"))
+            if i % 25 == 0:
+                print(f"  {i}/{len(items)}  added={added} already there={skipped}")
+    done_path.write_text(json.dumps(sorted(done), indent=0), encoding="utf-8")
+    print(f" Done. added={added} already there={skipped} failed={failed}")
+    return 0
+
+
+def cmd_conversations(args) -> int:
+    """Write output/conversations.html: every thread, both sides, in one page."""
+    from .convoview import build_html
+    settings.ensure_dirs()
+    path = settings.require_target_xlsx(args.xlsx)
+    out = settings.output_dir / "conversations.html"
+    _h("BUILD CONVERSATIONS PAGE")
+    n = build_html(settings, path, out, progress=lambda f, i, t, r: (
+        sys.stdout.write(f"\r  scanning {f}: {i}/{t}   "), sys.stdout.flush()))
+    print(f"\n Wrote {n} conversations -> {out}")
+    if not args.no_open:
+        import webbrowser
+        webbrowser.open(out.resolve().as_uri())
+    return 0
+
+
 def cmd_replies(args) -> int:
     from .replier import ThreadReader, draft_reply, load_queue, plan_meeting, save_queue
     settings.ensure_dirs()
@@ -1652,6 +1747,19 @@ def build_parser() -> argparse.ArgumentParser:
     rp.add_argument("--weekends", action="store_true",
                     help="Allow the local window on Saturday/Sunday")
     rp.set_defaults(func=cmd_replies)
+
+    ar = sub.add_parser("archive-sent",
+                        help="Copy every email sent over SMTP into your IMAP Sent folder")
+    ar.add_argument("--xlsx", help="Workbook containing the sent rows")
+    ar.add_argument("--resume", help="Path to resume")
+    ar.add_argument("--live", action="store_true", help="Actually copy (default: dry run)")
+    ar.set_defaults(func=cmd_archive_sent)
+
+    cv = sub.add_parser("conversations",
+                        help="Build output/conversations.html with every full thread")
+    cv.add_argument("--xlsx", help="Workbook containing the sent rows")
+    cv.add_argument("--no-open", action="store_true", help="Don't open it in the browser")
+    cv.set_defaults(func=cmd_conversations)
 
     ca = sub.add_parser("calendar-auth",
                         help="One-time Google Calendar sign-in for meeting holds")

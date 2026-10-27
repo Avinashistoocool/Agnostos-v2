@@ -315,6 +315,18 @@ When a professor says they can't fund you (or can only pay part), `replies` does
 
 Without the setup, meeting requests still go out. Only the calendar check and the holds are skipped.
 
+### Reading every conversation
+
+Mail sent over SMTP doesn't appear in your mail app's **Sent** folder, so a professor's answer shows up without the email it answers. Two fixes:
+
+```bash
+python -m outreach.cli conversations            # build output/conversations.html and open it
+python -m outreach.cli archive-sent --live      # copy everything already sent into your IMAP Sent folder (one-off backfill)
+```
+
+- **`conversations`** builds one searchable page with every thread in order: your first email (exactly as sent), resends from the second account, the professor's replies, bounces, your replies and follow-ups, and drafts still waiting to go out. You can filter by state (`awaiting you`, `replied`, `bounced`, `draft pending`...). Re-run it any time to refresh.
+- **`archive-sent`** backfills the IITD **Sent** folder (with the original Message-ID and Date) so Outlook/Thunderbird/webmail show full threads. It remembers what it copied (`output/archived_sent.json`), so re-running never duplicates. From now on, every email sent over SMTP is also copied to Sent automatically (`SAVE_TO_SENT=true`; Gmail already does this itself).
+
 ### `resend` — re-deliver the original email from a second account
 
 ```bash
