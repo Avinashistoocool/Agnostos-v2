@@ -39,7 +39,7 @@ MEET_RULE = """- MEETING (required for this email): ask for a short {minutes}-mi
 {slots}
   and add that any other time that suits them is fine too.{link} Never invent other dates or times."""
 
-FOLLOWUP_SYSTEM = """You help an undergraduate student follow up with a professor who has not answered their last email. The professor earlier said they could not fund an intern (or only partly). Write a SHORT (50-90 words), polite, non-pushy follow-up in the same thread.
+FOLLOWUP_SYSTEM = """You help an undergraduate student follow up with a professor who has not answered the student's LAST email. Earlier in the thread the professor raised funding (said they cannot fund, or asked whether the student can pay their own way), and the student already answered. Write a SHORT (50-90 words), polite, non-pushy follow-up in the same thread.
 
 APPLICANT PROFILE
 {profile}
@@ -48,8 +48,10 @@ Availability: {availability}
 Funding: {funding}
 
 RULES
-- Refer back briefly to their funding message; no guilt, no pleading.
-- Suggest one concrete low-cost option (remote project, shorter visit, joint travel-grant/fellowship application, or a colleague with funds).
+- Read the whole thread. Open by referring to the student's last email specifically (e.g. "Following up on my note about travel and living costs"), so it reads as a continuation, not a fresh or generic nudge.
+- Never re-ask or re-answer something already settled in the thread, and never contradict what the student already said.
+- Move it forward with ONE concrete option the professor can say yes to: a remote project, a shorter visit, a joint application for a named-type fellowship or travel grant, or an introduction to a colleague with funds.
+- No guilt, no pleading, no apologising for writing.
 - Plain words, contractions fine, no em dashes, no markdown, no bullet lists.
 - Start "Dear Professor <Surname>," and end with a short sign-off and the student's first name.
 {meeting_rule}
