@@ -150,6 +150,43 @@ def _tidy_spacing(text: str) -> str:
     return text.strip()
 
 
+_SELF_FUND_RE = re.compile(
+    r"(?:\b(?:can|could|will|would|happy to|able to|willing to|prepared to|plan to|"
+    r"ready to|i'?ll|i'?d)\b[^.!?\n]{0,40}"
+    r"\b(?:cover|pay|fund|finance|self-fund|support)\b[^.!?\n]{0,50}"
+    r"\b(?:travel|visa|living|accommodation|expenses|costs|stay|own|myself)\b)"
+    r"|\bbe self-?funded\b|\bself-?fund(?:ing|ed)?\b|\bmy own (?:funding|expenses|costs)\b",
+    re.I)
+_NEGATED_RE = re.compile(r"\b(?:not|n't|unable|cannot|can't|won't|no)\b", re.I)
+
+
+def offers_self_funding(text: str) -> list[str]:
+    """Sentences that offer to pay one's own way (negated statements are fine)."""
+    hits = []
+    for s in re.split(r"(?<=[.!?])\s+|\n+", text or ""):
+        if _SELF_FUND_RE.search(s) and not _NEGATED_RE.search(s):
+            hits.append(s.strip())
+    return hits
+
+
+def strip_self_funding(text: str) -> str:
+    """Remove self-funding offers; rewrite 'X and can cover travel' clauses."""
+    out = []
+    for para in (text or "").split("\n"):
+        sents = re.split(r"(?<=[.!?])\s+", para)
+        kept = []
+        for s in sents:
+            if not _SELF_FUND_RE.search(s) or _NEGATED_RE.search(s):
+                kept.append(s)
+                continue
+            # "I'm available May-July for 8-12 weeks and can cover travel..." -> keep availability.
+            m = re.match(r"(.*?\b(?:weeks|2027|months|summer)\b[^,;]*?)\s*(?:,|;|\band\b)", s, re.I)
+            if m and len(m.group(1)) > 20:
+                kept.append(m.group(1).rstrip(" ,;") + ".")
+        out.append(" ".join(k for k in kept if k))
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(out)).strip()
+
+
 def deslop(text: str) -> str:
     """Conservative deterministic pass. Never attempts sentence surgery."""
     if not text:

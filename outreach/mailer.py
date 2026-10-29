@@ -155,7 +155,18 @@ class Mailer:
             n += 1
         return n
 
+    def _guard(self, msg: EmailMessage) -> None:
+        """Last line of defence: never send an offer to pay one's own way."""
+        if self.s.can_self_fund in {"1", "true", "yes", "y", "on"}:
+            return
+        from .humanize import offers_self_funding
+        body = msg.get_body(("plain",))
+        hits = offers_self_funding(body.get_content() if body else "")
+        if hits:
+            raise ValueError(f"blocked: email offers self-funding (CAN_SELF_FUND=no): {hits[0][:90]}")
+
     def deliver(self, msg: EmailMessage) -> None:
+        self._guard(msg)
         if self.dry_run:
             return
         self._deliver(msg)
@@ -215,6 +226,10 @@ class Mailer:
             subject = f"[DRAFT -> {to_email}] {subject}"
             to_email, to_name = self.redirect_to, ""
         msg = self.build_message(to_email, to_name, subject, row["body"])
+        try:
+            self._guard(msg)
+        except ValueError as exc:
+            return {"status": "skipped: self-funding offer", "detail": str(exc), "message": msg}
         if self.dry_run:
             return {"status": "dry-run", "detail": "not sent", "message": msg}
         try:

@@ -243,6 +243,7 @@ def draft_reply(evaluator, thread: Thread, settings, profile,
     if slot_lines and action == "thank":
         action = "reply"          # a meeting request is never a closing thank-you
     body = deslop(str(data.get("body", "")).strip()) if action != "none" else ""
+    body = _no_self_funding(body, settings)
     return {"action": action if action in {"reply", "thank", "none"} else "none",
             "summary": str(data.get("summary", "")).strip()[:300], "body": body}
 
@@ -257,7 +258,14 @@ def draft_followup(evaluator, thread: Thread, settings, profile,
     user = (f"Professor: {row.get('name')} <{row['email']}>, {row.get('institution', '')}\n\n"
             f"THREAD (oldest first):\n{thread.render()}")
     data = evaluator.chat_json(system, user)
-    return deslop(str(data.get("body", "")).strip())
+    return _no_self_funding(deslop(str(data.get("body", "")).strip()), settings)
+
+
+def _no_self_funding(body: str, settings) -> str:
+    if settings.can_self_fund in {"1", "true", "yes", "y", "on"}:
+        return body
+    from .humanize import offers_self_funding, strip_self_funding
+    return strip_self_funding(body) if offers_self_funding(body) else body
 
 
 def save_queue(path: Path, items: list[dict]) -> None:

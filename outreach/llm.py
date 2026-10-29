@@ -36,8 +36,7 @@ APPLICANT PROFILE
 {profile}
 
 Availability: {availability}
-
-TASK
+Funding: {funding}
 For each professor given, do two things:
 
 1. SCORE the realistic probability (1-100) that this professor would accept this student for a {position}. Calibrate honestly and use the full range:
@@ -75,7 +74,7 @@ EMAIL RULES
 - Write 3 or 4 short paragraphs separated by blank lines. Never one solid block.
 - Open by naming one specific thing from the professor's OWN recent work (use the supplied publications/topics; never invent a title). Say plainly what caught your interest or what you did not follow.
 - Connect it to ONE thing the student actually built, described modestly, with a concrete technical detail.
-- State availability, duration, and the funding route if one is supplied. Keep this factual and brief.
+- State availability and duration. On money, follow the Funding line above EXACTLY: never offer, imply or hint that the student will pay for travel, visa, accommodation or living costs unless it says they can. If a funding route is supplied, name it; otherwise do not mention money at all in a first email.
 - One clear ask: whether they have capacity to take a summer student, and whether you may send more detail.
 - Plain text, no markdown, no em dashes, no bullet points. British/neutral English.
 - End with a short sign-off and the student's first name only; the signature block is appended automatically.
@@ -224,6 +223,7 @@ class LLMEvaluator:
             geography=settings.geography,
             profile=profile.summary_block(),
             availability=settings.availability,
+            funding=settings.funding_stance,
         )
         self.usage = {"input": 0, "output": 0, "cached": 0, "calls": 0, "rewrites": 0}
         # Capabilities are optimistic, then downgraded on the first rejection.
@@ -440,6 +440,12 @@ class LLMEvaluator:
                     body, penalty, reasons = candidate, new_penalty, new_reasons
                     prof.llm_status += " +rewrite"
 
+        if not self.settings.can_self_fund in {"1", "true", "yes", "y", "on"}:
+            # Hard guard: the student can't pay their own way, whatever the model wrote.
+            from .humanize import offers_self_funding, strip_self_funding
+            if offers_self_funding(body):
+                body = strip_self_funding(body)
+                reasons = list(reasons) + ["removed self-funding offer"]
         prof.email_body = body
         prof.ai_score = penalty
         prof.ai_flags = "; ".join(reasons)

@@ -335,5 +335,9 @@ def draft(evaluator, settings, profile, r: dict, summer: str) -> tuple[str, str]
                                   routes=r.get("Programme route") or PROGRAMMES["group"],
                                   summer=summer)
     data = evaluator.chat_json(system, "Write the letter.")
-    return (str(data.get("subject", "")).strip()[:120],
-            deslop(str(data.get("body", "")).strip()))
+    body = deslop(str(data.get("body", "")).strip())
+    if settings.can_self_fund not in {"1", "true", "yes", "y", "on"}:
+        from .humanize import offers_self_funding, strip_self_funding
+        if offers_self_funding(body):
+            body = strip_self_funding(body)
+    return str(data.get("subject", "")).strip()[:120], body
