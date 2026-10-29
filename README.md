@@ -156,6 +156,14 @@ Builds a large, ranked list of professors without you naming a single university
 | `--prestige-weight W` | With `--top-universities`: `0` = topic fit only, `1` = balanced (default), `3` = mostly prestige |
 | `--list-universities` | Print the region's top universities and exit |
 
+**Specific universities anywhere (e.g. the Ivy League).** `--also-universities` takes any `;`-separated list and works without `--top-universities`. Use `--countries usa` (or the matching region) so papers from those campuses aren't filtered out. Combine it with a wider `FOCUS_KEYWORDS` when you want more fields than physics:
+
+```bash
+python -m outreach.cli discover --count 700 --batches 14 --countries usa --top-universities 0 \
+    --also-universities "Harvard University; Yale University; Princeton University; Columbia University; University of Pennsylvania; Brown University; Cornell University; Dartmouth College; Massachusetts Institute of Technology; Stanford University; California Institute of Technology" \
+    --query "machine learning particle physics; reinforcement learning; robotics motion planning; computational mechanics"
+```
+
 **Aiming for the best universities.** `--top-universities N` ranks the universities in `--countries` by how many highly-cited papers (50+ citations) they've published since `--since`. That proxy tracks the usual league tables closely (for `dach`: ETH Zurich, TUM, LMU, Zurich, Heidelberg, Bern, EPFL...) and needs no hardcoded list. Discovery then only searches papers from those universities and ranks people by topic fit plus a prestige bonus for their university's rank. Check the list first:
 
 ```bash
