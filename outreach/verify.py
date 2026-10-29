@@ -52,6 +52,31 @@ _QUIET_LOCK = threading.Lock()
 _QUIET = {"depth": 0, "saved": None, "devnull": None}
 
 
+def _with_deadline(fn, seconds: float):
+    """Run fn() on a daemon thread; raise TimeoutError if it overruns.
+
+    ddgs occasionally blocks forever inside its HTTP client despite its own
+    timeout, which froze a whole verify run. A stuck call is abandoned (the
+    daemon thread dies with the process) and the next backend is tried.
+    """
+    box: dict = {}
+
+    def run():
+        try:
+            box["value"] = fn()
+        except BaseException as exc:  # noqa: BLE001
+            box["error"] = exc
+
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+    t.join(seconds)
+    if t.is_alive():
+        raise TimeoutError(f"search hung for over {int(seconds)}s")
+    if "error" in box:
+        raise box["error"]
+    return box.get("value")
+
+
 @contextlib.contextmanager
 def _quiet_stderr():
     """Mute stderr for the duration of the block.
@@ -606,7 +631,7 @@ class EmailFinder:
     # Tried in order; the first that answers wins. Public search endpoints
     # block scrapers aggressively and the one that works changes month to
     # month, so there is no single backend to rely on.
-    BACKENDS = ("mullvad_google", "bing", "yandex", "mullvad_brave")
+    BACKENDS = ("mullvad_google", "bing", "yahoo", "yandex", "mullvad_brave")
 
     def __init__(self, timeout: float = 15.0, delay: float = 1.5,
                  max_pages: int = 4, openalex=None):
@@ -734,8 +759,10 @@ class EmailFinder:
             self._pace("search:" + backend)
             try:
                 with _quiet_stderr():
-                    rows = DDGS(timeout=int(self.timeout)).text(
-                        query, backend=backend, max_results=limit * 2)
+                    rows = _with_deadline(
+                        lambda: DDGS(timeout=int(self.timeout)).text(
+                            query, backend=backend, max_results=limit * 2),
+                        self.timeout * 3 + 10)
             except Exception as exc:
                 self.search_error = f"{type(exc).__name__}: {exc}"
                 continue
