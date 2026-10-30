@@ -1,6 +1,6 @@
-﻿# Agnostos on macOS
+# Agnostos on macOS
 
-See also: [FAQ](FAQ.md) · [Diagnostics](DIAGNOSTICS.md)
+See also: [FAQ](faq.md) · [Diagnostics](diagnostics.md)
 
 This guide covers setup and daily use on macOS 12 or later, on Apple Silicon or Intel. It runs Agnostos as a local command-line tool.
 

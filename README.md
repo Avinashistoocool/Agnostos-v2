@@ -2,7 +2,7 @@
 
 **Agnostos** is a free, open-source tool that helps students land research internships. It finds professors whose recent papers match your resume, drafts one honest cold email per professor, sends them slowly from your own inbox during each professor's working hours, and drafts replies to the answers.
 
-> Hosted web version: [Agnostos web app](https://github.com/Avinashistoocool/Agnostos-v3) · Guides: [Windows](Documentation-for%20Windows.md) · [macOS](Documentation-for%20Mac.md) · [Linux](Documentation-for%20Linux.md) · [FAQ](FAQ.md)
+> Hosted web version: [Agnostos web app](https://github.com/Avinashistoocool/Agnostos-v3) · Guides: [Windows](docs/install-windows.md) · [macOS](docs/install-macos.md) · [Linux](docs/install-linux.md) · [FAQ](docs/faq.md)
 
 An autonomous, token-efficient pipeline for research internship outreach. Agnostos matches your CV against prospective supervisors, retrieves their recent publications, predicts acceptance probability, drafts tailored cold emails without generic LLM prose, and throttles outbound SMTP delivery.
 
@@ -17,6 +17,8 @@ targets ────┘        ▲ OpenAlex enrichment (free)            recheck
 Point it at your CV and a spreadsheet of professors. It reads your resume, ranks the list against it for free, looks up each professor's recent papers, writes a specific email per person, strips the AI tells out of the prose, and sends them on a human-looking schedule — writing every draft and status back into your spreadsheet as it goes.
 
 **It costs nothing.** The default provider is [Groq](https://console.groq.com/keys), whose free tier comfortably covers a full run. OpenAI (or any OpenAI-compatible gateway) is supported if you prefer it.
+
+**Documentation:** [avinashistoocool.github.io/Agnostos-v2](https://avinashistoocool.github.io/Agnostos-v2/) · [Technical report (PDF)](docs/Agnostos_Technical_Report.pdf), which explains the architecture and every scoring rule (local matcher, discovery ranking, cost estimate, AI-tell score, address confidence, send windows); LaTeX source in [`docs/Agnostos_Technical_Report.tex`](docs/Agnostos_Technical_Report.tex).
 
 ---
 
@@ -49,7 +51,7 @@ python -m outreach.cli replies --send --approve-all   # approve every unsent dra
 
 Certificate errors (`CERTIFICATE_VERIFY_FAILED ... _ssl.c:...`, common with python.org Python on macOS): run `pip install -U truststore certifi`, then `python -m outreach.cli tls-check`. Behind a TLS-inspecting proxy, set `SSL_CERT_FILE` to its root certificate.
 
-Step-by-step setup guides for each operating system: [Windows](Documentation-for%20Windows.md) · [macOS](Documentation-for%20Mac.md) · [Linux](Documentation-for%20Linux.md) · Questions: [FAQ](FAQ.md) · Something broken: [Diagnostics](DIAGNOSTICS.md)
+Step-by-step setup guides for each operating system: [Windows](docs/install-windows.md) · [macOS](docs/install-macos.md) · [Linux](docs/install-linux.md) · Questions: [FAQ](docs/faq.md) · Something broken: [Diagnostics](docs/diagnostics.md)
 
 SMTP is only needed for the last step — you can draft everything without it. Mode A scraping is entirely optional, and `.env.example` is organised so that only its first section is required; everything else has working defaults.
 
@@ -319,7 +321,7 @@ When a professor says they can't fund you (or can only pay part), `replies` does
 
 **Meeting requests.** Your second message in a thread always asks for a short call (`MEET_MINUTES`, default 20), and so does every funding follow-up. Each request offers three slots on different weekdays. Every slot falls inside the professor's `MEET_THEIR_HOURS` and your own `MEET_MY_HOURS` (in `MEET_MY_TZ`). Slots are never offered to two professors at once and, once Google Calendar is connected, avoid times you're already busy. When the email is sent, each proposed slot is added to your calendar as a tentative "HOLD". Delete the extra holds once the professor picks a time.
 
-**Google Calendar (one-time setup).** Follow **[CALENDAR.md](CALENDAR.md)**. It covers creating the Cloud project, making the app *External / Testing* (which avoids the common `Error 403: org_internal`), downloading `credentials.json`, running `python -m outreach.cli calendar-auth`, switching accounts, and troubleshooting.
+**Google Calendar (one-time setup).** Follow **[the calendar guide](docs/calendar.md)**. It covers creating the Cloud project, making the app *External / Testing* (which avoids the common `Error 403: org_internal`), downloading `credentials.json`, running `python -m outreach.cli calendar-auth`, switching accounts, and troubleshooting.
 
 Without the setup, meeting requests still go out. Only the calendar check and the holds are skipped.
 
@@ -576,6 +578,12 @@ python -m outreach.cli recheck --xlsx output/professors_500.xlsx --apply
 ```
 
 Every step is resumable: interrupt it and re-run the same command. Close the workbook in Excel before any step that writes to it.
+
+---
+
+## Citing
+
+If Agnostos helps your research or a report, cite it using GitHub's **Cite this repository** button (from [`CITATION.cff`](CITATION.cff)).
 
 ---
 

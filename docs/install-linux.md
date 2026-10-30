@@ -1,6 +1,6 @@
-﻿# Agnostos on Linux
+# Agnostos on Linux
 
-See also: [FAQ](FAQ.md) · [Diagnostics](DIAGNOSTICS.md)
+See also: [FAQ](faq.md) · [Diagnostics](diagnostics.md)
 
 This guide covers setup and daily use on Ubuntu/Debian, Fedora and Arch, as a desktop or a headless server. It runs Agnostos as a local command-line tool.
 

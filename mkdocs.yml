@@ -1,0 +1,46 @@
+site_name: Agnostos
+site_description: Resume-driven academic outreach for research internships
+site_url: https://avinashistoocool.github.io/Agnostos-v2/
+repo_url: https://github.com/Avinashistoocool/Agnostos-v2
+repo_name: Avinashistoocool/Agnostos-v2
+edit_uri: edit/main/docs/
+docs_dir: docs
+strict: true
+exclude_docs: |
+  *.tex
+
+theme:
+  name: material
+  palette:
+    - scheme: slate
+      primary: green
+      accent: green
+      toggle: {icon: material/brightness-4, name: Light mode}
+    - scheme: default
+      primary: green
+      accent: green
+      toggle: {icon: material/brightness-7, name: Dark mode}
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.highlight
+
+nav:
+  - Home: index.md
+  - Setup:
+      - Windows: install-windows.md
+      - macOS: install-macos.md
+      - Linux: install-linux.md
+  - FAQ: faq.md
+  - Diagnostics: diagnostics.md
+  - Google Calendar: calendar.md
+  - Technical report (PDF): Agnostos_Technical_Report.pdf
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc: {permalink: true}
+  - pymdownx.superfences
+  - pymdownx.highlight

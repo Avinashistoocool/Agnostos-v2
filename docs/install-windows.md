@@ -1,6 +1,6 @@
-﻿# Agnostos on Windows
+# Agnostos on Windows
 
-See also: [FAQ](FAQ.md) · [Diagnostics](DIAGNOSTICS.md)
+See also: [FAQ](faq.md) · [Diagnostics](diagnostics.md)
 
 This guide covers setup and daily use on Windows 10 or 11. It runs Agnostos as a local command-line tool.
 

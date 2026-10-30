@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+message: "If you use Agnostos in research or a report, please cite it as below."
+title: "Agnostos: resume-driven academic outreach for research internships"
+type: software
+authors:
+  - given-names: Avinash Chandra
+    family-names: Gupta
+    alias: Avinashistoocool
+version: 2.0.0
+date-released: 2026-10-30
+license: MIT
+repository-code: "https://github.com/Avinashistoocool/Agnostos-v2"
+url: "https://avinashistoocool.github.io/Agnostos-v2/"
+abstract: >-
+  Agnostos is an open-source command-line tool that helps students find research internships.
+  It parses a resume, builds a professor list from a research topic via the OpenAlex works index
+  (first/last authors, relevance floor, field anchoring, seniority gate) or reads an existing
+  spreadsheet, ranks it locally with a TF-IDF cosine plus a saturating domain-term bonus, enriches
+  each professor with recent first/last-author papers, and makes one language-model call per
+  professor for an acceptance estimate and a short honest email. Drafts pass through a
+  deterministic deslop stage and a rule-based AI-tell score with a conditional rewrite. Addresses
+  are verified by DNS and name matching and repaired from the professor's own pages. Mail is sent
+  with throttling inside recipient-local working hours, and replies are tracked over IMAP with
+  drafted follow-ups.
+keywords:
+  - academic outreach
+  - research internship
+  - cold email
+  - OpenAlex
+  - large language models
+  - TF-IDF
+  - email verification
+  - Groq

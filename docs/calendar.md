@@ -1,6 +1,6 @@
 # Google Calendar setup
 
-Agnostos uses Google Calendar for two things when it sends meeting requests (see [Funding follow-ups and meeting requests](README.md#funding-follow-ups-and-meeting-requests)):
+Agnostos uses Google Calendar for two things when it sends meeting requests (see [Funding follow-ups and meeting requests](https://github.com/Avinashistoocool/Agnostos-v2#funding-follow-ups-and-meeting-requests)):
 
 - **Choosing slots.** It never proposes a time when you're already busy.
 - **Holding slots.** When a reply goes out, each proposed time is added to your calendar as a tentative **HOLD: call with &lt;professor&gt;** event.

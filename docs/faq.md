@@ -1,6 +1,6 @@
 # Agnostos FAQ
 
-These are common questions about using Agnostos (v2, the command-line tool). For setup, see the guide for your OS: [Windows](Documentation-for%20Windows.md) · [macOS](Documentation-for%20Mac.md) · [Linux](Documentation-for%20Linux.md). If something is broken, go to [DIAGNOSTICS.md](DIAGNOSTICS.md).
+These are common questions about using Agnostos (v2, the command-line tool). For setup, see the guide for your OS: [Windows](install-windows.md) · [macOS](install-macos.md) · [Linux](install-linux.md). If something is broken, go to [Diagnostics](diagnostics.md).
 
 ---
 
@@ -39,7 +39,7 @@ Run `python -m outreach.cli stats`. Its "Why rows were / weren't drafted" sectio
 - `skipped: local score ... < 0.25` means the topic overlap is weak. Lower it with `run --min-score 0.15`.
 - `skipped: over max-professors cap` means the cap was hit. Raise it with `run --max-professors 400`.
 - `skipped: budget exhausted` means `BUDGET_USD` was reached.
-- `failed: ...` means a model error. See [DIAGNOSTICS.md](DIAGNOSTICS.md).
+- `failed: ...` means a model error. See [Diagnostics](diagnostics.md).
 
 **Can I edit a draft before it's sent?**
 Yes. Open the workbook and edit the **Custom Email Draft** or **Email Subject** cell, then save and close it. The sender uses whatever is in the cell.
