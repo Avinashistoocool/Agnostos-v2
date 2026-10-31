@@ -2,15 +2,52 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import time
+import zipfile
 from datetime import datetime
 from pathlib import Path
 
-from openpyxl import Workbook, load_workbook
+from openpyxl import Workbook
+from openpyxl import load_workbook as _openpyxl_load
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from .models import Professor
+
+
+def load_workbook(path, *args, retries: int = 10, **kwargs):
+    """openpyxl.load_workbook that tolerates another process mid-save.
+
+    Several senders (IITD, Gmail resend, replies) share professors.xlsx. A
+    reader that lands while a writer (or OneDrive) is rewriting it sees a
+    truncated zip; that used to kill a whole send run with BadZipFile.
+    """
+    for attempt in range(retries):
+        try:
+            return _openpyxl_load(path, *args, **kwargs)
+        except (zipfile.BadZipFile, EOFError, KeyError):
+            if attempt == retries - 1:
+                raise
+            time.sleep(3)
+
+
+def save_workbook(wb, path) -> None:
+    """Write to a temp file, then swap it in, so readers never see half a file."""
+    path = Path(path)
+    tmp = path.with_name(f"~{path.stem}.{os.getpid()}.tmp.xlsx")
+    wb.save(tmp)
+    for attempt in range(10):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            # Windows: Excel or a concurrent reader has it open right now.
+            if attempt == 9:
+                tmp.unlink(missing_ok=True)
+                raise
+            time.sleep(2)
 
 # Canonical header -> Professor attribute. Matching is fuzzy/lowercased.
 HEADER_MAP = {
@@ -224,7 +261,7 @@ def update_workbook(path: str | Path, professors: list[Professor],
                     continue  # never clobber manually-maintained cells
                 cell = ws.cell(row=p.source_row, column=col, value=val)
                 cell.alignment = Alignment(wrap_text=True, vertical="top")
-    wb.save(path)
+    save_workbook(wb, path)
     return path
 
 
@@ -297,7 +334,7 @@ def append_rows(path: str | Path, professors: list[Professor],
             if val not in (None, ""):
                 ws.cell(row=last, column=headers[name.lower()], value=val)
         p.source_sheet, p.source_row = ws.title, last
-    wb.save(path)
+    save_workbook(wb, path)
     return path
 
 
@@ -327,7 +364,7 @@ def write_new_workbook(path: str | Path, professors: list[Professor],
     for col, name in enumerate(OUTPUT_COLUMNS, 1):
         ws.column_dimensions[get_column_letter(col)].width = widths.get(name, 18)
     ws.freeze_panes = "B2"
-    wb.save(path)
+    save_workbook(wb, path)
     return path
 
 
@@ -455,7 +492,7 @@ def mark_sent(path: str | Path, updates: list[dict]) -> Path | None:
         if upd.get("message_id"):
             ws.cell(row=upd["row"], column=headers["message id"], value=upd["message_id"])
     try:
-        wb.save(path)
+        save_workbook(wb, path)
     except OSError:
         _park(sidecar, updates)
         return sidecar
@@ -488,4 +525,4 @@ def mark_replies(path: str | Path, replies: dict) -> None:
         # Never clobber notes you typed yourself.
         if not cell.value or str(cell.value).startswith("[reply]"):
             cell.value = note[:500]
-    wb.save(path)
+    save_workbook(wb, path)

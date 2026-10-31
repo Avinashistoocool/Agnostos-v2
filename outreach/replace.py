@@ -12,11 +12,11 @@ import json
 import re
 from pathlib import Path
 
-from openpyxl import load_workbook
 
 from .batches import name_key
 from .discover import Candidate, Discoverer, to_professor
-from .excel_io import _column_index, _find_header_row, append_rows, load_targets
+from .excel_io import (_column_index, _find_header_row, append_rows, load_targets,
+                       load_workbook, save_workbook)
 
 HARD = {"WRONG_PERSON_NAME_COLLISION", "MAILBOX_DOES_NOT_EXIST", "DEAD_DOMAIN",
         "RECIPIENT_REJECTED_BY_POLICY", "BOUNCED_OTHER"}
@@ -43,7 +43,7 @@ def mark_invalid(path: Path, failures: list[dict]) -> int:
                 ws.cell(r, cols["email notes"]).value = (
                     f"{f['root_cause']}: {f['server_or_professor_said'][:180]}")
             n += 1
-    wb.save(path)
+    save_workbook(wb, path)
     return n
 
 

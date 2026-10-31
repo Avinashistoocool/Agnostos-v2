@@ -25,7 +25,8 @@ from .discover import COUNTRY_GROUPS
 from .enrich import OpenAlexClient
 from .excel_io import (_column_index, _find_header_row, append_rows, is_writable,
                        load_for_sending, load_targets, mark_replies, mark_sent,
-                       sidecar_path, update_workbook, write_new_workbook)
+                       save_workbook, sidecar_path, update_workbook,
+                       write_new_workbook)
 from .llm import LLMEvaluator, confirm_gate, list_models
 from .mailer import Mailer
 from .matcher import filter_candidates
@@ -613,7 +614,7 @@ def cmd_resend(args) -> int:
     import csv
     from dataclasses import replace
     from datetime import timedelta
-    from openpyxl import load_workbook
+    from .excel_io import load_workbook
 
     settings.ensure_dirs()
     path = settings.require_target_xlsx(args.xlsx)
@@ -744,7 +745,7 @@ def cmd_resend(args) -> int:
             ws.cell(row=update["row"], column=cols["resent from"], value=alt.smtp_from)
             ws.cell(row=update["row"], column=cols["resend message id"],
                     value=update.get("message_id", ""))
-            wb.save(path)
+            save_workbook(wb, path)
         except OSError:
             print(_safe(f"   ({path.name} locked; resend of {src.get('email')} is in "
                         "send_log.csv and will not repeat)"))
@@ -1447,7 +1448,7 @@ _DONE_STATUSES = {"sent", "review-sent"}
 
 def _drop_sent(path: Path, professors):
     """Leave rows that were already mailed exactly as they are."""
-    from openpyxl import load_workbook
+    from .excel_io import load_workbook
     wb = load_workbook(path, read_only=True, data_only=True)
     done = set()
     for ws in wb.worksheets:
@@ -1688,7 +1689,7 @@ def cmd_recheck(args) -> int:
 
 def _write_emails(path: Path, professors) -> None:
     """Write adopted addresses into the Email column itself."""
-    from openpyxl import load_workbook
+    from .excel_io import load_workbook
     wb = load_workbook(path)
     for p in professors:
         if not (p.source_sheet and p.source_row and p.email):
@@ -1700,7 +1701,7 @@ def _write_emails(path: Path, professors) -> None:
                     if h in cols), None)
         if col:
             ws.cell(row=p.source_row, column=col, value=p.email)
-    wb.save(path)
+    save_workbook(wb, path)
 
 
 # ---------------------------------------------------------------- parser
@@ -1720,7 +1721,7 @@ def cmd_verify(args) -> int:
               "address; looking up the rest.")
         # Never-searched rows (e.g. fresh `discover` output) first; rows that
         # already failed a search are the least likely to succeed now.
-        from openpyxl import load_workbook
+        from .excel_io import load_workbook
         tried = set()
         wb = load_workbook(path, read_only=True, data_only=True)
         for ws in wb.worksheets:
