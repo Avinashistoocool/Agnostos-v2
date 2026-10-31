@@ -1,5 +1,9 @@
 # Agnostos: AI research internship outreach
 
+[![tests](https://github.com/Avinashistoocool/Agnostos-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/Avinashistoocool/Agnostos-v2/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/v/release/Avinashistoocool/Agnostos-v2)](https://github.com/Avinashistoocool/Agnostos-v2/releases)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **Agnostos** is a free, open-source tool that helps students land research internships. It finds professors whose recent papers match your resume, drafts one honest cold email per professor, sends them slowly from your own inbox during each professor's working hours, and drafts replies to the answers.
 
 > Hosted web version: [Agnostos web app](https://github.com/Avinashistoocool/Agnostos-v3) · Guides: [Windows](docs/install-windows.md) · [macOS](docs/install-macos.md) · [Linux](docs/install-linux.md) · [FAQ](docs/faq.md)
@@ -63,6 +67,22 @@ python -m outreach.cli verify --xlsx output/professors.xlsx --repair --apply
 ```
 
 See [`discover`](#discover--build-a-target-list-of-n-professors-in-batches) below.
+
+### Install a release / deploy
+
+Every tagged release is on the [Releases page](https://github.com/Avinashistoocool/Agnostos-v2/releases) (wheel and sdist) and on GHCR as a Docker image. Changes are listed in [CHANGELOG.md](CHANGELOG.md).
+
+```bash
+pip install "agnostos[calendar] @ git+https://github.com/Avinashistoocool/Agnostos-v2@v2.1.0"
+agnostos --version
+
+# or run it in Docker. Put .env, the resume and the workbook in ./data
+# (in data/.env, set RESUME_PATH=/data/... and TARGET_XLSX=/data/...)
+docker run --rm -it --env-file data/.env -v "$PWD/data:/data" ghcr.io/avinashistoocool/agnostos stats
+docker compose up -d        # sender + reply checker, weekdays, recipient-local 9-17
+```
+
+Live senders (`send --live`, `resend --live`, `replies --send --live`) hold a lock, so a scheduled task and a manual run can never mail the same people twice. How to cut a release: [RELEASING.md](RELEASING.md).
 
 ### Your target spreadsheet
 

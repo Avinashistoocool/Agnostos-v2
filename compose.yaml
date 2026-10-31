@@ -1,0 +1,23 @@
+# Run the daily pipeline on a server:
+#   mkdir data && cp .env resume.pdf professors.xlsx data/
+#   (in data/.env set RESUME_PATH=/data/resume.pdf and TARGET_XLSX=/data/professors.xlsx)
+#   docker compose up -d
+# Each service sends only on weekdays, inside each recipient's 9-17, and
+# holds a lock so a second copy can never mail the same people twice.
+x-agnostos: &agnostos
+  image: ghcr.io/avinashistoocool/agnostos:latest
+  build: .
+  env_file: data/.env
+  volumes: ["./data:/data"]
+  restart: unless-stopped
+
+services:
+  send:
+    <<: *agnostos
+    entrypoint: ["sh", "-c"]
+    command: ["while true; do agnostos send --live --yes --local-window 9-17 --wait; sleep 3600; done"]
+
+  replies:
+    <<: *agnostos
+    entrypoint: ["sh", "-c"]
+    command: ["while true; do agnostos check-replies; agnostos replies; sleep 21600; done"]

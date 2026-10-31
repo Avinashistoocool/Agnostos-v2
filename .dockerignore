@@ -1,0 +1,14 @@
+.git
+.github
+.env
+.env.*
+credentials.json
+client_secret*.json
+output/
+docs/
+tests/
+site/
+**/__pycache__
+*.xlsx
+*.pdf
+*.docx

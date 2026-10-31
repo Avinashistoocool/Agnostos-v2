@@ -1812,6 +1812,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="outreach",
         description="Resume-driven professor matching and personalized cold-email automation.")
+    from . import __version__
+    p.add_argument("--version", action="version", version=f"agnostos {__version__}")
     sub = p.add_subparsers(dest="command", required=True)
 
     sp = sub.add_parser("profile", help="Parse the resume and show what was extracted")
@@ -2086,6 +2088,18 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        if getattr(args, "live", False) and (
+                args.command in {"send", "resend"} or getattr(args, "send", False)):
+            from .locks import AlreadyRunning, InstanceLock
+            settings.ensure_dirs()
+            lock = settings.output_dir / f".{args.command}.lock"
+            try:
+                with InstanceLock(lock):
+                    return args.func(args)
+            except AlreadyRunning as exc:
+                print(f" `{args.command}` is already sending ({exc}); not starting a "
+                      "second copy, which could mail the same people twice.")
+                return 3
         return args.func(args)
     except KeyboardInterrupt:
         print("\n Interrupted.")

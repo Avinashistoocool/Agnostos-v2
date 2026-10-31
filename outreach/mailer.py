@@ -369,6 +369,9 @@ class Mailer:
         start = time.time()
         deadline = start + delay
         total = _fmt(delay)
+        # Piped to a log (Tee-Object, >>), a once-a-second timer bloats the
+        # file by megabytes per wait; there, update once a minute instead.
+        tick = 1.0 if sys.stdout.isatty() else 60.0
         while True:
             now = time.time()
             elapsed, left = now - start, deadline - now
@@ -377,6 +380,6 @@ class Mailer:
             sys.stdout.write(f"\r    waiting {_fmt(elapsed)} / {total} "
                              f"({label} in {_fmt(left + 0.999)})  ")
             sys.stdout.flush()
-            time.sleep(min(1.0, left))
+            time.sleep(min(tick, left))
         sys.stdout.write(f"\r    waited {total} ({label}){' ' * 40}\n")
         sys.stdout.flush()

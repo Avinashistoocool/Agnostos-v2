@@ -12,6 +12,9 @@ except ImportError:  # pragma: no cover
         return False
 
 ROOT = Path(__file__).resolve().parent.parent
+# Repo checkout: .env sits next to the package. pip/Docker install: the
+# package lives in site-packages, so also read .env from the working dir.
+load_dotenv(Path.cwd() / ".env")
 load_dotenv(ROOT / ".env")
 
 
