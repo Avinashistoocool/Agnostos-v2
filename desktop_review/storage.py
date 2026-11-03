@@ -13,7 +13,8 @@ import zipfile
 
 from openpyxl import load_workbook
 from outreach.queue_store import (
-    QueueBusy, QueueChanged, live_replies_running, queue_operation, write_queue,
+    QueueBusy, QueueChanged, live_replies_running, lock_held, queue_operation,
+    workbook_operation, write_queue,
 )
 
 
@@ -84,6 +85,135 @@ class Workspace:
                         (sources / "replier.py").read_text(encoding="utf-8"))
             except OSError:
                 return False
+
+    def coordinated_workbook(self) -> bool:
+        with self._lock:
+            if self.path is None:
+                return False
+            sources = self.path / "outreach"
+            try:
+                return ("def workbook_operation(" in
+                        (sources / "queue_store.py").read_text(encoding="utf-8")
+                        and "workbook_operation(settings.output_dir" in
+                        (sources / "cli.py").read_text(encoding="utf-8"))
+            except OSError:
+                return False
+
+
+def _draft_headers(sheet) -> dict:
+    for row_number, row in enumerate(
+        sheet.iter_rows(min_row=1, max_row=min(sheet.max_row, 20), values_only=True), 1
+    ):
+        names = {str(value or "").strip().lower(): index
+                 for index, value in enumerate(row, 1)}
+        if {"custom email draft", "send status"} <= names.keys() and (
+            "professor name" in names or "name" in names
+        ):
+            return names
+    return {}
+
+
+def read_drafts(workspace: Workspace, page: int = 0) -> dict:
+    if not isinstance(page, int) or not 0 <= page <= 10000:
+        raise ReviewError(400, "Invalid draft page")
+    path = workspace.file("professors.xlsx")
+    if not path.is_file():
+        raise ReviewError(404, "No output/professors.xlsx in this workspace")
+    revision = hashlib.sha256(path.read_bytes()).hexdigest()
+    book = load_workbook(path, read_only=True, data_only=True)
+    items = []
+    try:
+        for sheet in book:
+            headers = _draft_headers(sheet)
+            if not headers:
+                continue
+            for number, values in enumerate(
+                sheet.iter_rows(min_row=1, values_only=True), 1
+            ):
+                if number <= 20 and str(values[headers["custom email draft"] - 1]
+                                         if len(values) >= headers["custom email draft"] else "").strip().lower() \
+                        == "custom email draft":
+                    continue
+                def cell(name: str):
+                    index = headers.get(name, 0) - 1
+                    return str(values[index] or "") if 0 <= index < len(values) else ""
+                body = cell("custom email draft")
+                if not body or not (cell("professor name") or cell("name")):
+                    continue
+                if cell("sent at").strip() or cell("send status").strip().lower() in {"sent", "review-sent"}:
+                    continue
+                items.append({"sheet": sheet.title, "row": number,
+                              "name": cell("professor name") or cell("name"),
+                              "email": cell("email address") or cell("email"),
+                              "subject": cell("email subject"), "body": body})
+    finally:
+        book.close()
+    if hashlib.sha256(path.read_bytes()).hexdigest() != revision:
+        raise ReviewError(409, "Workbook changed while loading drafts; reload")
+    return {"version": revision,
+            "page": page, "total": len(items), "items": items[page * 50:(page + 1) * 50],
+            "editable": workspace.coordinated_workbook()}
+
+
+def update_draft(workspace: Workspace, sheet: str, row: int, version: str, body: str) -> dict:
+    if not workspace.coordinated_workbook():
+        raise ReviewError(409, "Update the selected v2 CLI for coordinated draft editing")
+    if (not isinstance(sheet, str) or not sheet or len(sheet) > 31
+            or not isinstance(row, int) or row < 2
+            or not isinstance(version, str) or not re.fullmatch(r"[a-f0-9]{64}", version)
+            or not isinstance(body, str) or not body.strip() or len(body) > 30000):
+        raise ReviewError(400, "Invalid draft edit")
+    path = workspace.file("professors.xlsx")
+    try:
+        with workspace._lock, workbook_operation(path.parent):
+            if any(lock_held(path.parent / name) for name in
+                   (".send.lock", ".resend.lock", ".replies.lock", ".desktop_cli.lock")):
+                raise ReviewError(409, "A CLI job is active; retry after it finishes")
+            if hashlib.sha256(path.read_bytes()).hexdigest() != version:
+                raise ReviewError(409, "Workbook changed; reload drafts before editing")
+            book = load_workbook(path)
+            try:
+                if sheet not in book:
+                    raise ReviewError(404, "Workbook sheet not found")
+                tab = book[sheet]
+                headers = _draft_headers(tab)
+                if not headers or row > tab.max_row or row <= next(
+                    (r for r in range(1, min(tab.max_row, 20) + 1)
+                     if str(tab.cell(r, headers["custom email draft"]).value or "").strip().lower()
+                     == "custom email draft"), 0
+                ):
+                    raise ReviewError(404, "Draft row not found")
+                status = str(tab.cell(row, headers["send status"]).value or "").strip().lower()
+                sent_at = str(tab.cell(row, headers.get("sent at", 0)).value or "") \
+                    if headers.get("sent at") else ""
+                if status in {"sent", "review-sent"} or sent_at.strip():
+                    raise ReviewError(409, "Sent rows are read-only")
+                if not tab.cell(row, headers["custom email draft"]).value:
+                    raise ReviewError(409, "Draft was removed; reload")
+                tab.cell(row, headers["custom email draft"], body)
+                pending = path.with_name(
+                    f"~{path.stem}.desktop-{os.getpid()}.{threading.get_ident()}.tmp.xlsx")
+                try:
+                    book.save(pending)
+                    if hashlib.sha256(path.read_bytes()).hexdigest() != version:
+                        raise ReviewError(409, "Workbook changed; reload drafts before editing")
+                    for attempt in range(10):
+                        try:
+                            os.replace(pending, path)
+                            break
+                        except PermissionError:
+                            if attempt == 9:
+                                raise
+                            time.sleep(0.1)
+                finally:
+                    pending.unlink(missing_ok=True)
+            finally:
+                book.close()
+            return {"version": hashlib.sha256(path.read_bytes()).hexdigest()}
+    except QueueBusy as exc:
+        raise ReviewError(409, str(exc)) from exc
+    except (OSError, ValueError, zipfile.BadZipFile) as exc:
+        raise ReviewError(503, f"Workbook unavailable: {type(exc).__name__}") from exc
 
 
 def statistics(workspace: Workspace) -> dict:

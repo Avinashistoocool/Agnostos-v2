@@ -28,52 +28,75 @@ Point it at your CV and a spreadsheet of professors. It reads your resume, ranks
 
 ---
 
-## Windows desktop viewer (view/review only)
+## Native Windows desktop app (existing v2 workspace)
 
-This optional standalone app reads your **existing v2 workspace**. Select the
-repository folder on first launch; if started from this checkout it suggests
-the current folder. It remembers the folder in
-`%LOCALAPPDATA%\Agnostos-v2-Review\workspace.json` (only the path, not a copy
-of your workbook). The dashboard reads `output\professors.xlsx`, the
-Conversations tab displays the **last saved** `output\conversations.html`, and
-Reply drafts reads `output\reply_queue.json`. Refresh rereads local files;
-it never connects to IMAP or runs an outreach command.
+The standalone **PySide6/Qt widget application** includes **every public CLI command** under CLI
+tools: profile, models, run (list/scrape), discover, verify, recheck, send,
+resend, stats, check-replies, replies, conversations, archive-sent, legacy
+(also legacy-researchers), replace-failed, calendar-auth and tls-check. It
+invokes the **same v2 CLI code in an isolated subprocess**, not a separate
+v3 server/database. Select your existing repository folder on first launch;
+the current checkout is suggested when found. Only the chosen path is saved
+to `%LOCALAPPDATA%\Agnostos-v2-Review\workspace.json`.
 
-You can edit an unsent reply's body and explicitly approve or unapprove that
-individual draft. **Approval is not sending**, but an approved unsent draft
-can be sent later by your separately scheduled v2 CLI; inspect the recipient
-and text carefully. Sent replies are read-only. The CLI and viewer now share
-cross-process queue locks and atomically replace queue files. If a reply job is
-busy or the queue changed since you loaded it, the viewer rejects the save
-and asks you to reload; it never overwrites a newer send status. Already-running
-pre-upgrade live senders are also detected via their existing lock. A selected
-older checkout without the coordinated v2 CLI stays viewable but editing is
-disabled until its CLI is updated. No send, resend or restart controls exist
-in this app.
+The dashboard reads `output\professors.xlsx`, saved conversations display
+the text of `output\conversations.html` without running its embedded script, and reply review edits individual unsent bodies
+and approvals in `output\reply_queue.json`. The Setup tab reads `.env`
+without changing it. Your per-workspace UI overrides live in AppData;
+secrets are masked in the UI and encrypted using Windows DPAPI. The CLI
+subprocess receives these overrides, runs with the selected workspace as its
+working directory and writes its regular output there. Job logs and status
+live in AppData; after a restart an unfinished job is shown as detached or
+interrupted, never automatically rerun.
 
-Windows needs Microsoft Edge WebView2 Runtime. Download the entire distribution
-and launch `Agnostos-v2-Review.exe` beside its `_internal` folder. To build
+**Live SMTP is off by default.** Each live GUI action requires selecting
+Live/Review, typing an exact command-specific confirmation, and answering
+the CLI's own visible `[Y/N]` prompt in Jobs. The GUI does not expose
+`--yes`, blanket approval, no-focus, allow-unverified, weekends, or send
+resend bypasses. It enforces a recipient-local window, focus/robots rules,
+weekday defaults, paced delays and a per-job daily cap of at most 40.
+Legacy live sending has additional CLI guards for verified addresses,
+focus, recipient-local weekdays/hours and a shared daily cap; the GUI still
+requires explicit typed confirmation and the CLI's [Y/N] prompt. Live
+jobs cannot be cancelled mid-delivery (to avoid an unrecorded send).
+Non-live jobs can be cancelled, but inspect the output if cancelled during
+a workbook write.
+
+An approved unsent reply can also be sent later by a separately scheduled v2
+CLI. Queue writes are atomic and coordinated with the CLI; stale or busy
+edits are rejected. The First-email drafts tab edits individual **unsent**
+workbook drafts using a revision check and atomic save, and never edits a
+sent row. If a CLI job is active or the workbook has changed, reload before
+retrying. A selected
+older checkout without coordinated v2 queue support remains viewable but
+cannot edit reply drafts.
+
+This is a native Windows window (no WebView2 or localhost HTTP server).
+Download the entire distribution and launch `Agnostos-v2-Desktop.exe` beside its `_internal` folder. To build
 your own ZIP from a Windows checkout with Python 3.13:
 
 ```powershell
 .\build-desktop-review.ps1 -Python "C:\Path\To\Python313\python.exe"
-.\dist\Agnostos-v2-Review\Agnostos-v2-Review.exe --health-check
-.\dist\Agnostos-v2-Review\Agnostos-v2-Review.exe
-python -m unittest discover -s tests -p desktop_review_test.py -v
+.\dist\Agnostos-v2-Desktop\Agnostos-v2-Desktop.exe --health-check
+.\dist\Agnostos-v2-Desktop\Agnostos-v2-Desktop.exe
+python tests\native_desktop_test.py
+python tests\full_desktop_contract_test.py
 .\tests\check_desktop_review_package.ps1
 ```
 
-Output: `dist\Agnostos-v2-Review.zip` (containing the executable folder).
-After a successful push to `main`, the **Windows desktop review** GitHub
+Output: `dist\Agnostos-v2-Desktop.zip` (containing the executable folder and
+headless Chromium for CLI directory scraping, *not* for the GUI).
+After a successful push to `main`, the **Native Windows desktop** GitHub
 Actions run also offers this ZIP as a downloadable artifact (Actions →
 workflow run → Artifacts); extract the inner ZIP from the downloaded artifact.
 Artifacts expire after 14 days and are not installer releases.
-The UI uses bundled CSS and Windows system fonts, so viewing works offline.
-The server listens on a random `127.0.0.1` port; private API requests require
-an in-memory desktop token. It is not designed for a public listener or
-untrusted local processes. The ZIP contains only the executable and allowlisted
-viewer assets/dependencies: no `.env`, mailbox keys, workbooks, conversation
-HTML, reply queue or other user data. The app creates **no new v3 database**.
+The native GUI uses Qt widgets and Windows system fonts, so viewing works offline;
+discovery, models, mail and Calendar authorization require internet.
+There is **no listening socket**. The ZIP contains only the executable,
+Qt, CLI code, public `sources.yaml` and dependencies: no `.env`,
+mailbox keys, workbooks, conversation HTML, reply queue or other user data.
+The app creates **no new v3 database**. It only runs while the PC is on;
+existing scheduled CLI tasks remain independent of the GUI.
 
 ## Quick start
 

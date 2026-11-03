@@ -653,10 +653,14 @@ def cmd_resend(args) -> int:
     if log_path.exists():
         with log_path.open(newline="", encoding="utf-8") as fh:
             for rec in csv.DictReader(fh):
-                if rec.get("mode") == "resend" and rec.get("status") == "sent":
+                if rec.get("status") != "sent":
+                    continue
+                if rec.get("mode") == "resend":
                     done.add(rec.get("email", "").strip().lower())
-                    if rec.get("time", "").startswith(f"{datetime.now():%Y-%m-%d}"):
-                        today += 1
+                if rec.get("mode") in {"resend", "legacy"} and rec.get("time", "").startswith(
+                    f"{datetime.now():%Y-%m-%d}"
+                ):
+                    today += 1
 
     wb = load_workbook(path, read_only=True, data_only=True)
     resent_cells = set()
@@ -804,6 +808,11 @@ def _gcal_or_none():
         print(_safe(f" (Google Calendar unavailable: {exc}; slots won't be checked "
                     "against your calendar)"))
         return None
+
+
+def reply_live_room(queue: list[dict], daily_cap: int, today: str) -> int:
+    delivered = sum(1 for item in queue if str(item.get("sent_at", "")).startswith(today))
+    return max(0, min(daily_cap, 40) - delivered)
 
 
 def _held_slots(items) -> list:
@@ -1136,7 +1145,22 @@ def cmd_legacy(args) -> int:
         for r in held:
             print(_safe(f"  held: {r['Name']} <{r['Email']}> (status {r.get('Email Status')}; "
                         "set Approved = yes after checking)"))
-        todo = todo[:args.limit]
+        if args.live:
+            from .legacy_guard import plan_legacy_live
+            try:
+                todo, held_live, window, room = plan_legacy_live(
+                    todo, settings.output_dir / "send_log.csv",
+                    daily_cap=min(s.daily_send_cap, s.resend_daily_cap),
+                    limit=args.limit, window_spec=args.local_window or s.send_local_window or "9-17",
+                    focus_keywords=s.focus_keywords, history_rows=rows)
+            except ValueError as exc:
+                print(f" ERROR: {exc}")
+                return 1
+            for row, reason in held_live:
+                print(_safe(f"  held: {row.get('Name')} <{row.get('Email')}>: {reason}"))
+            print(f" Legacy live window {window.spec}; remaining daily cap: {room}")
+        else:
+            todo = todo[:args.limit]
         if not todo:
             print(" Nothing approved. Set Approved = yes in legacy.xlsx (or pass --approve-all).")
             return 0
@@ -1147,6 +1171,11 @@ def cmd_legacy(args) -> int:
         import random, time
         with Mailer(alt, profile, dry_run=not args.live) as mailer:
             for i, r in enumerate(todo):
+                if args.live and not window.ready({
+                    "country": r.get("Country") or _tld_country(r.get("Email", ""))
+                }):
+                    print(_safe(f"  held: {r['Name']} <{r['Email']}>: local window closed"))
+                    continue
                 msg = mailer.build_message(r["Email"], r["Name"], r["Subject"], r["Draft"])
                 try:
                     mailer.deliver(msg)
@@ -1191,6 +1220,11 @@ def cmd_replies(args) -> int:
         items = [q for q in load_queue(queue_path)
                  if q.get("approved") and not q.get("sent_at") and q.get("body")]
         _h(f"SEND FOLLOW-UPS ({'LIVE' if args.live else 'DRY RUN'})")
+        if args.live:
+            today = f"{datetime.now():%Y-%m-%d}"
+            remaining = reply_live_room(load_queue(queue_path), settings.daily_send_cap, today)
+            items = items[:remaining]
+            print(f" Reply daily cap: {remaining} remaining; approved this run: {len(items)}")
         if not items:
             print(f" Nothing approved in {queue_path.name}. Set \"approved\": true on the"
                   " items you want, or pass --approve-all.")
@@ -1257,6 +1291,11 @@ def cmd_replies(args) -> int:
                                 a["calendar_events"] = holds
                     # Persist each delivery so an interrupted --wait run can't resend.
                     save_queue(queue_path, all_items)
+                    if pending:
+                        import random
+                        Mailer._countdown(random.uniform(
+                            max(60, settings.send_delay_min),
+                            max(60, settings.send_delay_max)), "next reply")
         for q, w in held[:5]:
             print(_safe(f"  held       {q['email']} ({q.get('country') or '?'}: "
                         f"opens in {fmt_duration(w)})"))
@@ -1972,6 +2011,8 @@ def build_parser() -> argparse.ArgumentParser:
     lg.add_argument("--send", action="store_true", help="Send approved letters")
     lg.add_argument("--approve-all", action="store_true", help="Treat every drafted letter as approved")
     lg.add_argument("--limit", type=int, default=10, help="Max letters per run (default 10)")
+    lg.add_argument("--local-window", metavar="H-H",
+                    help="Required recipient-local weekday hours for live letters (default 9-17)")
     lg.add_argument("--live", action="store_true", help="With --send: actually send")
     lg.add_argument("--yes", action="store_true", help="Skip confirmation")
     lg.add_argument("--resume", help="Path to resume")
@@ -2102,22 +2143,31 @@ def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     try:
         def invoke():
-            if args.command == "replies":
-                from .queue_store import QueueBusy, queue_operation
+            from contextlib import nullcontext
+            from .queue_store import QueueBusy, queue_operation, workbook_operation
+            if args.command in {"run", "send", "resend", "discover", "verify", "recheck",
+                                    "check-replies", "replace-failed", "legacy", "legacy-researchers"}:
                 settings.ensure_dirs()
-                try:
-                    with queue_operation(settings.output_dir, timeout=10):
+                workbook = workbook_operation(settings.output_dir, timeout=10)
+            else:
+                workbook = nullcontext()
+            queue = queue_operation(settings.output_dir, timeout=10) \
+                if args.command == "replies" else nullcontext()
+            try:
+                with workbook, queue:
+                        if args.command == "replies":
+                            settings.ensure_dirs()
                         return args.func(args)
-                except QueueBusy:
-                    print(" Reply queue is busy; retry after the current review finishes.")
-                    return 3
-            return args.func(args)
+            except QueueBusy:
+                print(" Workbook or reply queue is busy; retry after the current operation finishes.")
+                return 3
 
         if getattr(args, "live", False) and (
                 args.command in {"send", "resend"} or getattr(args, "send", False)):
             from .locks import AlreadyRunning, InstanceLock
             settings.ensure_dirs()
-            lock = settings.output_dir / f".{args.command}.lock"
+            lock_name = "legacy" if args.command == "legacy-researchers" else args.command
+            lock = settings.output_dir / f".{lock_name}.lock"
             try:
                 with InstanceLock(lock):
                     return invoke()

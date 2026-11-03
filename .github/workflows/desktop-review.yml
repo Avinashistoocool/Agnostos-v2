@@ -1,4 +1,4 @@
-name: Windows desktop review
+name: Native Windows desktop
 
 on:
   push:
@@ -19,23 +19,22 @@ jobs:
           python-version: "3.13"
           cache: pip
           cache-dependency-path: desktop-review-requirements.txt
-      - name: Build standalone viewer
+      - name: Build native desktop application
         shell: pwsh
         run: .\build-desktop-review.ps1 -Python python
-      - name: Install browser test dependencies
+      - name: Test native widgets, command safety and package
         shell: pwsh
         run: |
-          python -m pip install playwright
-          python -m playwright install chromium
-      - name: Test viewer and package
-        shell: pwsh
-        run: |
-          python -m unittest discover -s tests -p desktop_review_test.py -v
+          python tests\native_desktop_test.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests\full_desktop_contract_test.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests\legacy_live_guard_test.py -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           .\tests\check_desktop_review_package.ps1
       - uses: actions/upload-artifact@v4
         with:
-          name: Agnostos-v2-Review-Windows
-          path: dist\Agnostos-v2-Review.zip
+          name: Agnostos-v2-Desktop-Windows
+          path: dist\Agnostos-v2-Desktop.zip
           if-no-files-found: error
           retention-days: 14

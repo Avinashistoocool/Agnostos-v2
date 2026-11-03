@@ -8,8 +8,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 # A checkout's .env takes priority over an unrelated one in the current
 # directory. Installed packages can instead read .env from the working dir.
-ENV_FILE = ROOT / ".env"
-if not ENV_FILE.is_file():
+ENV_FILE = Path(os.environ["AGNOSTOS_ENV_FILE"]).resolve() if os.getenv("AGNOSTOS_ENV_FILE") \
+    else ROOT / ".env"
+if not ENV_FILE.is_file() and not os.getenv("AGNOSTOS_ENV_FILE"):
     ENV_FILE = Path.cwd() / ".env"
 try:
     from dotenv import load_dotenv

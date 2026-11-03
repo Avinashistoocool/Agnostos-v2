@@ -1,3 +1,9 @@
 openpyxl>=3.1,<4
-pywebview>=5.4,<7
+python-dotenv>=1,<2
+pywin32>=310
+PySide6>=6.8,<7
 pyinstaller>=6.15,<7
+playwright>=1.45,<2
+google-api-python-client>=2,<3
+google-auth-oauthlib>=1,<2
+-r requirements.txt

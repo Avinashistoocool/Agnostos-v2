@@ -43,9 +43,14 @@ def queue_operation(output_dir: Path, timeout: float = 0):
     return _lock(Path(output_dir) / ".reply_queue.operation.lock", timeout)
 
 
-def live_replies_running(output_dir: Path) -> bool:
-    """Also detect a pre-upgrade live sender holding the existing .replies.lock."""
-    path = Path(output_dir) / ".replies.lock"
+def workbook_operation(output_dir: Path, timeout: float = 0):
+    """Serialize CLI workbook jobs with native per-row draft edits."""
+    return _lock(Path(output_dir) / ".desktop_workbook.operation.lock", timeout)
+
+
+def lock_held(path: Path) -> bool:
+    """Non-mutating probe for an OS-level InstanceLock owned by another process."""
+    path = Path(path)
     if not path.exists():
         return False
     with path.open("r+b") as handle:
@@ -69,6 +74,10 @@ def live_replies_running(output_dir: Path) -> bool:
                 else:
                     fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
     return False
+
+
+def live_replies_running(output_dir: Path) -> bool:
+    return lock_held(Path(output_dir) / ".replies.lock")
 
 
 def write_queue(path: Path, data: bytes, expected: str | None = None) -> str:
