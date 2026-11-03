@@ -447,12 +447,24 @@ def cmd_send(args) -> int:
         if update["status"] in {"sent", "review-sent"}:
             mark_sent(path, [update])
 
+    initial_sent = None
+    if not dry_run and not review_to:
+        # A restarted sender must honor the day's total, not receive another
+        # full per-run allowance. Count the whole workbook, not just --sheet.
+        initial_sent = Counter(
+            str(r.get("sent_at") or "")[:10] for r in load_for_sending(path)
+            if r.get("send_status", "").lower() == "sent")
+        today = datetime.now().strftime("%Y-%m-%d")
+        print(f" First emails already sent today: {initial_sent[today]} "
+              f"of {settings.daily_send_cap}")
+
     with Mailer(settings, profile, dry_run=dry_run, redirect_to=review_to) as mailer:
         updates = mailer.send_batch(rows, progress=progress, resend=args.resend,
                                     top=args.top,
                                     allow_unverified=args.allow_unverified,
                                     window=window, wait_for_window=args.wait,
-                                    on_update=None if dry_run else checkpoint)
+                                    on_update=None if dry_run else checkpoint,
+                                    initial_sent_by_date=initial_sent)
     if held[0]:
         print(f"\n {held[0]} row(s) held: outside their local {window.spec} window. "
               "Re-run later, or add --wait to sit until each window opens.")

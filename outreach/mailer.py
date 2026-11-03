@@ -257,7 +257,8 @@ class Mailer:
     def send_batch(self, rows: list[dict], progress=None,
                    resend: bool = False, top: int | None = None,
                    allow_unverified: bool = False, window=None,
-                   wait_for_window: bool = False, on_update=None) -> list[dict]:
+                   wait_for_window: bool = False, on_update=None,
+                   initial_sent_by_date: dict[str, int] | None = None) -> list[dict]:
         """Send pending rows. With `window` (a schedule.SendWindow), a row only
         goes out inside the recipient's local hours; rows outside it are left
         untouched, or waited for when `wait_for_window` is set."""
@@ -276,8 +277,19 @@ class Mailer:
         total = len(pending)
         queue = list(enumerate(pending, 1))
         consecutive_failures = 0
+
+        def cap_reached() -> bool:
+            if self.dry_run:
+                return False
+            if initial_sent_by_date is None:
+                return self.sent_count >= self.s.daily_send_cap
+            today = datetime.now().strftime("%Y-%m-%d")
+            sent_now = sum(1 for u in updates if u["status"] == "sent"
+                           and u.get("sent_at", "").startswith(today))
+            return initial_sent_by_date.get(today, 0) + sent_now >= self.s.daily_send_cap
+
         while queue:
-            if self.sent_count >= self.s.daily_send_cap and not self.dry_run:
+            if cap_reached():
                 # Leave the rest untouched for the next run instead of waiting
                 # out their local windows just to mark them skipped.
                 break
@@ -299,7 +311,7 @@ class Mailer:
                 i, row = queue.pop(pick)
             else:
                 i, row = queue.pop(0)
-            if self.sent_count >= self.s.daily_send_cap and not self.dry_run:
+            if cap_reached():
                 updates.append({**row, "status": "skipped: daily cap reached"})
                 continue
             if row.get("email_status") == "invalid" and not allow_unverified:
