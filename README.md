@@ -1,5 +1,7 @@
 # Agnostos: AI research internship outreach
 
+![Agnostos — research outreach, done honestly](docs/assets/agnostos-banner.png)
+
 [![tests](https://github.com/Avinashistoocool/Agnostos-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/Avinashistoocool/Agnostos-v2/actions/workflows/ci.yml)
 [![release](https://img.shields.io/github/v/release/Avinashistoocool/Agnostos-v2)](https://github.com/Avinashistoocool/Agnostos-v2/releases)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
