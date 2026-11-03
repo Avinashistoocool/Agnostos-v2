@@ -5,17 +5,20 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parent.parent
+# A checkout's .env takes priority over an unrelated one in the current
+# directory. Installed packages can instead read .env from the working dir.
+ENV_FILE = ROOT / ".env"
+if not ENV_FILE.is_file():
+    ENV_FILE = Path.cwd() / ".env"
 try:
     from dotenv import load_dotenv
-except ImportError:  # pragma: no cover
-    def load_dotenv(*_a, **_k):
-        return False
-
-ROOT = Path(__file__).resolve().parent.parent
-# Repo checkout: .env sits next to the package. pip/Docker install: the
-# package lives in site-packages, so also read .env from the working dir.
-load_dotenv(Path.cwd() / ".env")
-load_dotenv(ROOT / ".env")
+except ImportError as exc:  # pragma: no cover
+    if ENV_FILE.is_file():
+        raise RuntimeError("python-dotenv is required to read .env; install "
+                           "dependencies with: python -m pip install -r requirements.txt") from exc
+else:
+    load_dotenv(ENV_FILE)
 
 
 def _f(key: str, default: float) -> float:
@@ -97,8 +100,9 @@ class ConfigError(RuntimeError):
 def _require_file(value, env_key: str, what: str) -> Path:
     if looks_like_placeholder(value):
         raise ConfigError(
-            f"{env_key} is not set. Point it at {what} in your .env file.\n"
-            f"   Copy .env.example to .env and edit section 1.")
+            f"{env_key} is missing or still a placeholder. Point it at {what} "
+            f"in {ENV_FILE}.\n"
+            "   On another PC, use that PC's actual file path, not the sample path.")
     path = Path(value).expanduser()
     if not path.exists():
         raise ConfigError(f"{env_key} points at a file that does not exist: {path}")

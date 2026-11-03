@@ -89,6 +89,9 @@ On another computer, set `RESUME_PATH` to **that computer's actual resume file**
 do not reuse someone else's absolute path. Use a genuine PDF or DOCX (not a
 renamed image or folder). In Windows Explorer, turn on **File name extensions**
 to check that the file does not have a hidden extra extension.
+Install dependencies with `python -m pip install -r requirements.txt` on that
+computer too; `python-dotenv` is needed to read `.env`. Run the CLI from this
+checkout, which reads its own `.env` instead of one from an unrelated folder.
 
 ```bash
 python -m outreach.cli profile             # sanity-check resume parsing
