@@ -10,10 +10,11 @@ import subprocess
 import sys
 
 from openpyxl import Workbook
-from desktop_review.commands import build_argv
-from desktop_review.storage import Workspace
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from desktop_review.commands import build_argv
+from desktop_review.storage import Workspace
 
 
 def main(executable: Path) -> None:
@@ -56,6 +57,14 @@ def main(executable: Path) -> None:
                    AGNOSTOS_ENV_FILE=str(workspace / ".env"), OUTPUT_DIR=str(output),
                    TARGET_XLSX=str(output / "professors.xlsx"), PYTHONUNBUFFERED="1")
         env.pop("PYTHONPATH", None)
+        if command == "stats":
+            rejected = subprocess.run(
+                [str(executable.resolve()), "--cli", "stats", "--yes"],
+                cwd=workspace, env=env, stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, timeout=30)
+            assert rejected.returncode == 3, "Frozen entry accepted unlisted CLI flag"
+            assert not result.exists(), "Rejected CLI invocation wrote a success result"
         completed = subprocess.run(
             [str(executable.resolve()), "--cli", *argv],
             cwd=workspace, env=env, stdin=subprocess.DEVNULL,

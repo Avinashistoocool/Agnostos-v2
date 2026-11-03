@@ -47,7 +47,9 @@ secrets are masked in the UI and encrypted using Windows DPAPI. The CLI
 subprocess receives these overrides, runs with the selected workspace as its
 working directory and writes its regular output there. Job logs and status
 live in AppData; after a restart an unfinished job is shown as detached or
-interrupted, never automatically rerun.
+interrupted, never automatically rerun. The bundled subprocess revalidates
+each recorded command and its options before entering the CLI; arbitrary
+raw `--cli` flags are not accepted by the desktop executable.
 
 **Live SMTP is off by default.** Each live GUI action requires selecting
 Live/Review, typing an exact command-specific confirmation, and answering
@@ -86,9 +88,10 @@ python tests\full_desktop_contract_test.py
 
 Output: `dist\Agnostos-v2-Desktop.zip` (containing the executable folder and
 headless Chromium for CLI directory scraping, *not* for the GUI).
-After a successful push to `main`, the **Native Windows desktop** GitHub
-Actions run also offers this ZIP as a downloadable artifact (Actions →
-workflow run → Artifacts); extract the inner ZIP from the downloaded artifact.
+This full native build is currently **local only**. After GitHub access is
+restored and these changes are pushed to `main`, the **Native Windows desktop**
+GitHub Actions run can also offer this ZIP as a downloadable artifact (Actions
+→ workflow run → Artifacts); extract the inner ZIP from the downloaded artifact.
 Artifacts expire after 14 days and are not installer releases.
 The native GUI uses Qt widgets and Windows system fonts, so viewing works offline;
 discovery, models, mail and Calendar authorization require internet.

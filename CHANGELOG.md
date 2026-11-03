@@ -7,6 +7,20 @@ changes, MINOR for new commands or options, PATCH for fixes.
 
 ## [Unreleased]
 
+### Added
+- Native PySide6 Windows application with guided controls for all v2 CLI
+  commands, local settings, first-email and reply-draft review, job logs and
+  progress. The existing CLI remains the internal engine and can still run
+  scheduled automation.
+- Offline Windows ZIP build with packaged CLI, Qt widgets and discovery
+  resources; it does not contain user credentials, workbooks or mail.
+
+### Fixed
+- Legacy live sends now require verified, in-focus recipients and respect
+  weekday/local windows, funding rules, a shared daily cap and per-run address
+  deduplication. The desktop additionally rejects zero live-send limits and
+  refuses raw safety-bypass flags in its packaged worker.
+
 ## [2.2.0] - 2026-11-04
 
 ### Added
