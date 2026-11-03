@@ -81,10 +81,11 @@ def _load_sources(path: Path) -> list[dict]:
         data = json.loads(path.read_text(encoding="utf-8-sig"))
     else:
         try:
-            import yaml
+            from ruamel.yaml import YAML
         except ImportError as exc:
-            raise RuntimeError("pip install pyyaml, or use a .json sources file") from exc
-        data = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
+            raise RuntimeError("Install dependencies with pip install -r requirements.txt, "
+                               "or use a .json sources file") from exc
+        data = YAML(typ="safe", pure=True).load(path.read_text(encoding="utf-8-sig"))
     sources = data.get("sources", data) if isinstance(data, dict) else data
     if not isinstance(sources, list):
         raise ValueError("Sources file must contain a list of {url, institution, country}")

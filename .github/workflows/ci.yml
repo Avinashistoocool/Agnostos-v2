@@ -38,3 +38,38 @@ jobs:
 
       - name: Provider integration test
         run: python tests/openai_stub_test.py
+
+      - name: YAML source and resume path tests
+        run: |
+          python tests/yaml_sources_test.py
+          python tests/resume_path_test.py
+
+  windows-315:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.15"
+          cache: pip
+
+      - name: Install using wheels only (no Visual C++ build tools)
+        run: |
+          python -m pip install --upgrade pip
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pip install --only-binary=:all: -r requirements.txt reportlab
+          exit $LASTEXITCODE
+
+      - name: Build test fixtures
+        run: python tests/make_fixtures.py
+
+      - name: Verify YAML, resume parsing and email pipeline
+        run: |
+          python tests/yaml_sources_test.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/resume_path_test.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/smoke_test.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/openai_stub_test.py
+          exit $LASTEXITCODE

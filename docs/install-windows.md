@@ -8,7 +8,7 @@ This guide covers setup and daily use on Windows 10 or 11. It runs Agnostos as a
 
 ## 1. Install the prerequisites
 
-1. **Python 3.10 or newer.** Get it from https://www.python.org/downloads/windows/ and tick **"Add python.exe to PATH"** in the installer.
+1. **Python 3.10 or newer, including Python 3.15.** Get a stable release from https://www.python.org/downloads/windows/ and tick **"Add python.exe to PATH"** in the installer.
    Check it worked:
    ```powershell
    python --version
@@ -29,8 +29,15 @@ cd Agnostos-v2
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -U pip
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
+
+The standard dependencies have Windows Python 3.15 wheels, so Visual C++
+Build Tools are **not** required. If pip tries to compile PyYAML, run
+`git pull` first: older versions of Agnostos required PyYAML, which does not
+provide a Windows 3.15 wheel. After updating, create a fresh virtual
+environment as shown above and reinstall requirements. Use the same `python`
+or `.\.venv\Scripts\python.exe` for installation and CLI commands.
 
 If PowerShell says *running scripts is disabled*, run this once and then activate again:
 ```powershell

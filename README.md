@@ -603,6 +603,10 @@ python tests/openai_stub_test.py    # real OpenAI SDK against a local stub serve
 ```
 
 Both suites run on a fresh clone with **no `.env` and no API key** — they fall back to synthetic fixtures (`tests/fixtures/`) generated on demand. If your `.env` points at real files, those are used instead, so the same tests double as a check of your own setup. CI runs them on Python 3.10, 3.12, and 3.13.
+Windows CI additionally checks Python 3.15 using prebuilt wheels only. A
+fresh 3.15 installation does not need Visual C++ Build Tools: the base
+requirements use a pure-Python YAML reader and include `tzdata` for
+recipient-local send windows. See the [Windows guide](docs/install-windows.md).
 
 `smoke_test.py` covers resume parsing, Excel round-trips, filter behaviour, cost maths on both free and paid providers, a mocked LLM pass, early abort on repeated API failures, draft formatting repair, the humanising layer, idempotent column writes, attachment handling, resume-safety on interrupted sends, `.eml` export, scraper extraction, block detection, email verification, discovery batch planning and resume fingerprints, append-only workbook growth, institution matching for `recheck`, skipping already-sent rows (including ones parked in the pending sidecar), and the rule that `--apply` never replaces an address that already passed.
 

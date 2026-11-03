@@ -3,7 +3,9 @@ pdfplumber>=0.11.0
 python-docx>=1.1.0
 python-dotenv>=1.0.0
 openai>=1.50.0
-PyYAML>=6.0
+# Pure-Python YAML loader: PyYAML has no Windows Python 3.15 wheel and
+# otherwise tries to compile a C extension with Visual C++ Build Tools.
+ruamel.yaml>=0.18,<0.20
 
 # `verify --repair` email lookup. Works without it, but far less reliably:
 # it falls back to scraping one search engine, which gets blocked quickly.
@@ -14,6 +16,9 @@ ddgs>=9.0.0
 # truststore uses the OS store (Keychain / Windows CertStore); certifi is the fallback.
 truststore>=0.9.0
 certifi>=2024.2.2
+# Windows Python has no bundled IANA timezone database; recipient-local
+# send windows need country names and zones even in a fresh virtualenv.
+tzdata>=2025.2
 # Lets the OpenAI client use the same trust store (newer openai releases
 # no longer install httpx themselves).
 httpx>=0.27

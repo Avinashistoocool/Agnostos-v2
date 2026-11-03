@@ -7,6 +7,25 @@ changes, MINOR for new commands or options, PATCH for fixes.
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-11-04
+
+### Added
+- Windows Python 3.15 support for the CLI without C++ Build Tools, with a
+  wheel-only Windows CI job and Python 3.15 tests.
+- A standalone Windows desktop reviewer for existing v2 workbooks,
+  conversations and selectively approved reply drafts. Sending remains in
+  the CLI; the packaged application contains no credentials or user data.
+
+### Fixed
+- Replace required PyYAML (no Windows 3.15 wheel) with a pure-Python YAML
+  reader for scraping sources and include `tzdata` so recipient-local
+  sending windows work in a fresh Windows virtual environment.
+- IMAP reply scans reconnect after transient session loss; the first-email
+  cap survives sender restarts; wrongly named reply greetings are blocked.
+- Resume configuration errors identify a missing/placeholder path, directory,
+  unsupported extension or missing `.env` dependency rather than failing
+  later with misleading errors.
+
 ## [2.1.0] - 2026-11-01
 
 ### Added
@@ -56,6 +75,7 @@ changes, MINOR for new commands or options, PATCH for fixes.
 - First public release: resume parsing, local matcher, OpenAlex enrichment,
   LLM drafting with de-slop pass, throttled SMTP sending, Excel round-trip.
 
-[Unreleased]: https://github.com/Avinashistoocool/Agnostos-v2/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/Avinashistoocool/Agnostos-v2/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/Avinashistoocool/Agnostos-v2/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/Avinashistoocool/Agnostos-v2/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/Avinashistoocool/Agnostos-v2/releases/tag/v2.0.0
