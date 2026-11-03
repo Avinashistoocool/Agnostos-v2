@@ -85,7 +85,7 @@ PLACEHOLDERS = (
 
 def looks_like_placeholder(value) -> bool:
     text = str(value or "").strip().lower()
-    if not text:
+    if text in {"", ".", "./", ".\\"}:
         return True
     return any(token in text for token in PLACEHOLDERS)
 
@@ -102,6 +102,8 @@ def _require_file(value, env_key: str, what: str) -> Path:
     path = Path(value).expanduser()
     if not path.exists():
         raise ConfigError(f"{env_key} points at a file that does not exist: {path}")
+    if not path.is_file():
+        raise ConfigError(f"{env_key} must point at a file, not a folder: {path}")
     return path
 
 # OpenAI only caches prompt prefixes at or above this length, and does so

@@ -85,6 +85,11 @@ cp .env.example .env                       # Windows: copy .env.example .env
 
 Open `.env` and fill in section 1 only: your resume path, your target `.xlsx`, a free [Groq key](https://console.groq.com/keys), and your SMTP details. Then:
 
+On another computer, set `RESUME_PATH` to **that computer's actual resume file**;
+do not reuse someone else's absolute path. Use a genuine PDF or DOCX (not a
+renamed image or folder). In Windows Explorer, turn on **File name extensions**
+to check that the file does not have a hidden extra extension.
+
 ```bash
 python -m outreach.cli profile             # sanity-check resume parsing
 python -m outreach.cli models              # see what your key can run

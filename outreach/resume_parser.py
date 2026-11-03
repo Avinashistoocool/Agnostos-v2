@@ -297,6 +297,8 @@ def parse_resume(path: str | Path) -> ResumeProfile:
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"Resume not found: {path}")
+    if not path.is_file():
+        raise ValueError(f"Resume path is a folder, not a file: {path}")
     suffix = path.suffix.lower()
     if suffix == ".pdf":
         raw = _read_pdf(path)
@@ -305,7 +307,9 @@ def parse_resume(path: str | Path) -> ResumeProfile:
     elif suffix in {".txt", ".md"}:
         raw = path.read_text(encoding="utf-8", errors="ignore")
     else:
-        raise ValueError(f"Unsupported resume format: {suffix}")
+        raise ValueError(f"Unsupported resume format: {suffix or '(no extension)'} "
+                         f"for {path.name}. Use an actual PDF or DOCX, and point "
+                         "RESUME_PATH in .env at that file.")
 
     text = _despace(raw)
     lines = [ln.strip() for ln in text.splitlines()]
