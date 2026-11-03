@@ -5,7 +5,11 @@ $exe = Join-Path $folder "Agnostos-v2-Desktop.exe"
 $archive = Join-Path (Get-Location) "dist\Agnostos-v2-Desktop.zip"
 $required = @(
     "Agnostos-v2-Desktop.exe",
-    "_internal\sources.yaml"
+    "_internal\sources.yaml",
+    "_internal\licenses\LICENSE",
+    "_internal\licenses\THIRD_PARTY_NOTICES.md",
+    "_internal\licenses\LGPL-3.0.txt",
+    "_internal\licenses\GPL-3.0.txt"
 )
 foreach ($file in $required) {
     if (-not (Test-Path (Join-Path $folder $file) -PathType Leaf)) {

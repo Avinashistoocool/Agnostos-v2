@@ -98,6 +98,8 @@ discovery, models, mail and Calendar authorization require internet.
 There is **no listening socket**. The ZIP contains only the executable,
 Qt, CLI code, public `sources.yaml` and dependencies: no `.env`,
 mailbox keys, workbooks, conversation HTML, reply queue or other user data.
+The ZIP includes [third-party license notices](docs/licenses/THIRD_PARTY_NOTICES.md)
+and the applicable Qt LGPL/GPL terms.
 The app creates **no new v3 database**. It only runs while the PC is on;
 existing scheduled CLI tasks remain independent of the GUI.
 
