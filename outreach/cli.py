@@ -2100,6 +2100,18 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        def invoke():
+            if args.command == "replies":
+                from .queue_store import QueueBusy, queue_operation
+                settings.ensure_dirs()
+                try:
+                    with queue_operation(settings.output_dir, timeout=10):
+                        return args.func(args)
+                except QueueBusy:
+                    print(" Reply queue is busy; retry after the current review finishes.")
+                    return 3
+            return args.func(args)
+
         if getattr(args, "live", False) and (
                 args.command in {"send", "resend"} or getattr(args, "send", False)):
             from .locks import AlreadyRunning, InstanceLock
@@ -2107,12 +2119,12 @@ def main(argv=None) -> int:
             lock = settings.output_dir / f".{args.command}.lock"
             try:
                 with InstanceLock(lock):
-                    return args.func(args)
+                    return invoke()
             except AlreadyRunning as exc:
                 print(f" `{args.command}` is already sending ({exc}); not starting a "
                       "second copy, which could mail the same people twice.")
                 return 3
-        return args.func(args)
+        return invoke()
     except KeyboardInterrupt:
         print("\n Interrupted.")
         return 130

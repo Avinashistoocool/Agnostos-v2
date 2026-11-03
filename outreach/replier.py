@@ -269,8 +269,8 @@ def _no_self_funding(body: str, settings) -> str:
 
 
 def save_queue(path: Path, items: list[dict]) -> None:
-    path.write_text(json.dumps(items, indent=2, default=str, ensure_ascii=False),
-                    encoding="utf-8")
+    from .queue_store import write_queue
+    write_queue(path, json.dumps(items, indent=2, default=str, ensure_ascii=False).encode("utf-8"))
 
 
 def load_queue(path: Path) -> list[dict]:

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agnostos v2 · View &amp; Review</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header>
+    <div><h1>Agnostos <small>v2 · View &amp; Review</small></h1>
+      <p>Local workspace viewer. No mail or pipeline commands run here.</p></div>
+    <div id="workspace-name" class="location"></div>
+  </header>
+  <main>
+    <section id="workspace-setup" class="panel hidden">
+      <h2>Select your existing v2 workspace</h2>
+      <p>Select the repository folder containing <code>outreach\cli.py</code> and
+        <code>output\professors.xlsx</code>. No files are imported or copied.</p>
+      <div class="row">
+        <input id="workspace-path" aria-label="Workspace folder path" placeholder="C:\path\to\Agnostos-v2">
+        <button id="browse">Browse…</button>
+        <button id="select-workspace">Use folder</button>
+      </div>
+      <p id="workspace-error" class="error" role="alert"></p>
+    </section>
+    <section id="dashboard" class="hidden">
+      <nav aria-label="Sections">
+        <button data-tab="overview" class="active">Dashboard</button>
+        <button data-tab="conversations">Conversations</button>
+        <button data-tab="queue">Reply drafts</button>
+        <button id="change-workspace">Change workspace</button>
+      </nav>
+      <div id="notice" role="status"></div>
+      <section id="overview" class="panel tab">
+        <div class="row split"><div><h2>Workbook summary</h2>
+          <p>Read directly from <code>output\professors.xlsx</code>.</p></div>
+          <button id="refresh-stats">Refresh</button></div>
+        <div class="metrics" id="metrics"></div>
+        <p id="stats-updated" class="muted"></p>
+      </section>
+      <section id="conversations" class="panel tab hidden">
+        <div class="row split"><div><h2>Saved conversations</h2>
+          <p>Displays the latest existing <code>output\conversations.html</code>.
+            Refresh rereads that local HTML; it does not check mail or regenerate it.</p></div>
+          <button id="refresh-conversations">Refresh file</button></div>
+        <p id="conversations-updated" class="muted"></p>
+        <iframe id="conversations-frame" title="Saved conversations" sandbox="allow-scripts"></iframe>
+      </section>
+      <section id="queue" class="panel tab hidden">
+        <div class="row split"><div><h2>Reply queue</h2>
+          <p>Edit only unsent drafts in <code>output\reply_queue.json</code>.</p></div>
+          <button id="refresh-queue">Reload queue</button></div>
+        <p class="warning"><strong>Approval is consequential:</strong> an approved unsent draft
+          may be sent later by your separate scheduled v2 CLI. This app never sends mail.
+          Review the recipient and full body before approving.</p>
+        <p id="queue-count" class="muted"></p>
+        <div id="drafts"></div>
+      </section>
+    </section>
+  </main>
+  <script src="/app.js" defer></script>
+</body>
+</html>

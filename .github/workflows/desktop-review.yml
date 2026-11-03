@@ -1,0 +1,41 @@
+name: Windows desktop review
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: desktop-review-requirements.txt
+      - name: Build standalone viewer
+        shell: pwsh
+        run: .\build-desktop-review.ps1 -Python python
+      - name: Install browser test dependencies
+        shell: pwsh
+        run: |
+          python -m pip install playwright
+          python -m playwright install chromium
+      - name: Test viewer and package
+        shell: pwsh
+        run: |
+          python -m unittest discover -s tests -p desktop_review_test.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\tests\check_desktop_review_package.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Agnostos-v2-Review-Windows
+          path: dist\Agnostos-v2-Review.zip
+          if-no-files-found: error
+          retention-days: 14

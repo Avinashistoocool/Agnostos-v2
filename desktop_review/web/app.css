@@ -1,0 +1,23 @@
+:root{font:16px/1.5 "Segoe UI",Arial,sans-serif;color:#202b3d;background:#f4f6fb}
+*{box-sizing:border-box}body{margin:0}header{background:#1f3864;color:white;padding:22px max(24px,calc((100vw - 1200px)/2));display:flex;justify-content:space-between;gap:24px;align-items:center}
+h1{font-size:27px;margin:0}h1 small{font-size:15px;font-weight:400;color:#d9e7ff}header p{margin:3px 0 0;color:#d9e7ff}main{max-width:1200px;margin:28px auto;padding:0 20px}
+h2{margin:0 0 8px}p{margin:6px 0 16px}.location{overflow-wrap:anywhere;max-width:50%;font-size:13px}
+.panel{border:1px solid #dfe5ef;background:white;border-radius:14px;padding:24px;margin:18px 0;box-shadow:0 4px 20px #1f38640a}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.split{justify-content:space-between}
+input,textarea,button{font:inherit}input,textarea{border:1px solid #aeb9ca;border-radius:8px;padding:9px;background:#fff;color:#202b3d}
+input:focus,textarea:focus,button:focus-visible{outline:2px solid #3869c3;outline-offset:2px}
+#workspace-path{min-width:330px;flex:1}
+button{border:1px solid #1f3864;background:#1f3864;color:white;border-radius:8px;padding:9px 16px;cursor:pointer}
+button:hover{background:#30558d}button:disabled{opacity:.55;cursor:not-allowed}
+nav{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}nav button{background:white;color:#1f3864}
+nav button.active{background:#1f3864;color:white}
+.hidden{display:none!important}.muted{color:#59677e;font-size:14px}.error{color:#aa1d2c}.warning{background:#fff5da;border-left:4px solid #b47500;padding:12px;border-radius:6px}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.metric{background:#f1f5fb;border-radius:12px;padding:18px}.metric b{display:block;font-size:30px}
+iframe{width:100%;height:65vh;border:1px solid #dfe5ef;border-radius:10px}
+.draft{border:1px solid #dfe5ef;border-radius:10px;padding:18px;margin:15px 0}
+.draft.sent{background:#f5f6f7}.draft h3{margin:0 0 4px;overflow-wrap:anywhere}
+.draft pre{font:14px/1.5 "Segoe UI",Arial,sans-serif;white-space:pre-wrap;overflow-wrap:anywhere;background:#f7f9fc;padding:12px;border-radius:8px}
+.draft textarea{width:100%;min-height:180px;resize:vertical}.draft label{display:flex;gap:8px;align-items:center;margin:10px 0}
+.draft .row{justify-content:space-between}.status{font-size:13px;color:#59677e}
+@media(max-width:700px){header{display:block}.location{max-width:100%;margin-top:8px}main{padding:0 12px}.panel{padding:15px}#workspace-path{min-width:200px}}
