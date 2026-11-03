@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import mimetypes
+from difflib import SequenceMatcher
 import random
 import re
 import smtplib
 import ssl
 import sys
 import time
+import unicodedata
 from datetime import datetime
 from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid
@@ -122,6 +124,18 @@ class Mailer:
         # IMAP headers may arrive folded across lines; header values can't contain CR/LF.
         subject, in_reply_to, references, to_name = (
             " ".join(str(v or "").split()) for v in (subject, in_reply_to, references, to_name))
+        salutation = re.match(r"^\s*Dear\s+(?:Professor|Prof\.?|Dr\.?)\s+([^,:\n]+)",
+                              body, re.I)
+        if salutation and to_name:
+            surname = to_name.split()[-1].strip(".,")
+            def fold(value):
+                return "".join(ch for ch in unicodedata.normalize("NFKD", value.casefold())
+                               if not unicodedata.combining(ch))
+            names = re.findall(r"[^\W\d_]+(?:[-'][^\W\d_]+)*", salutation.group(1))
+            if names and not any(SequenceMatcher(None, fold(surname), fold(n)).ratio() >= 0.8
+                                 for n in names):
+                raise ValueError(f"reply salutation names someone else: {salutation.group(0).strip()!r} "
+                                 f"for {to_name!r}; correct the draft before sending")
         msg = EmailMessage()
         from_name = self.s.smtp_from_name or (self.profile.name if self.profile else "")
         msg["From"] = formataddr((from_name, self.s.smtp_from)) if from_name else self.s.smtp_from
