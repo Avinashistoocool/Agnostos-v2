@@ -5,6 +5,7 @@ import email
 import imaplib
 import re
 import ssl
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from email.header import decode_header, make_header
@@ -87,6 +88,7 @@ class ReplyChecker:
         self.password = settings.imap_password or settings.smtp_password
         self.conn: imaplib.IMAP4 | None = None
         self.folders: list[str] = []
+        self._selected_folder: str | None = None
 
     def __enter__(self):
         from .tls import context
@@ -112,12 +114,44 @@ class ReplyChecker:
             except Exception:
                 pass
 
+    def _reconnect(self) -> None:
+        selected = self._selected_folder
+        self.__exit__(None, None, None)
+        for attempt in range(3):
+            try:
+                self.__enter__()
+                if selected:
+                    typ, _ = self.conn.select(f'"{selected}"', readonly=True)
+                    if typ != "OK":
+                        raise imaplib.IMAP4.error(f"Cannot reopen IMAP folder {selected}")
+                    self._selected_folder = selected
+                return
+            except (OSError, imaplib.IMAP4.abort):
+                if attempt == 2:
+                    raise
+                time.sleep(2 ** attempt)
+
+    def _call(self, method: str, *args, **kwargs):
+        try:
+            return getattr(self.conn, method)(*args, **kwargs)
+        except (imaplib.IMAP4.abort, OSError):
+            # Some servers close a long-lived session mid-scan. Reopen the
+            # selected folder and retry this one command, not the whole batch.
+            self._reconnect()
+            return getattr(self.conn, method)(*args, **kwargs)
+
+    def _select(self, folder: str):
+        typ, data = self._call("select", f'"{folder}"', readonly=True)
+        if typ == "OK":
+            self._selected_folder = folder
+        return typ, data
+
     def _search(self, *criteria: str) -> list[bytes]:
-        typ, data = self.conn.search(None, *criteria)
+        typ, data = self._call("search", None, *criteria)
         return data[0].split() if typ == "OK" and data and data[0] else []
 
     def _fetch(self, num: bytes) -> email.message.Message | None:
-        typ, data = self.conn.fetch(num, "(BODY.PEEK[])")
+        typ, data = self._call("fetch", num, "(BODY.PEEK[])")
         for item in data or []:
             if isinstance(item, tuple):
                 return email.message_from_bytes(item[1])
@@ -139,7 +173,7 @@ class ReplyChecker:
                 found[key] = reply
 
         for folder in self.folders:
-            typ, _ = self.conn.select(f'"{folder}"', readonly=True)
+            typ, _ = self._select(folder)
             if typ != "OK":
                 continue
             for n, row in enumerate(rows, 1):

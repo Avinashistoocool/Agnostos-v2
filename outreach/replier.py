@@ -173,7 +173,7 @@ class ThreadReader(ReplyChecker):
         threads = {(r["sheet"], r["row"]): Thread(r) for r in rows}
         seen: set[str] = set()
         for folder, kind in self._all_folders():
-            if self.conn.select(f'"{folder}"', readonly=True)[0] != "OK":
+            if self._select(folder)[0] != "OK":
                 continue
             for n, row in enumerate(rows, 1):
                 if progress:
