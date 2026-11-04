@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-ink text-cream font-sans antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+  ::selection {
+    background: rgba(181, 69, 46, 0.45);
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #363a44 transparent;
+  }
+  :focus-visible {
+    outline: none;
+  }
+}
+
+@layer components {
+  .focus-ring {
+    @apply focus-visible:ring-2 focus-visible:ring-rust/70 focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
+  }
+  .card {
+    @apply rounded-xl border border-line bg-surface shadow-card;
+  }
+  .input {
+    @apply w-full rounded-lg border border-line bg-ink/60 px-3 py-2 text-sm text-cream placeholder:text-slate-dim
+      transition-colors hover:border-line-strong focus:border-rust/70 focus:outline-none focus:ring-2 focus:ring-rust/25
+      disabled:opacity-50;
+  }
+  .label {
+    @apply mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate;
+  }
+  .kbd {
+    @apply rounded border border-line bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] text-slate;
+  }
+  .skeleton {
+    @apply relative overflow-hidden rounded-md bg-surface-2;
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+    animation: shimmer 1.4s infinite;
+  }
+  @keyframes shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+}
+
+input[type="range"] {
+  accent-color: #b5452e;
+}

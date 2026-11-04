@@ -12,6 +12,7 @@ from email.header import decode_header, make_header
 from email.utils import parseaddr, parsedate_to_datetime
 
 from .config import Settings
+from .mailbox import imap_login
 
 AUTO_RE = re.compile(
     r"out of (the )?office|automatic reply|auto[- ]?reply|autoreply|abwesenheit|"
@@ -95,7 +96,7 @@ class ReplyChecker:
         ctx = context()
         self.conn = imaplib.IMAP4_SSL(self.host, self.s.imap_port, ssl_context=ctx,
                                       timeout=60)
-        self.conn.login(self.user, self.password)
+        imap_login(self.conn, self.s, self.user, self.password)
         typ, data = self.conn.list()
         existing = set()
         for raw in data or []:

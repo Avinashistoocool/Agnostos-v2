@@ -47,7 +47,8 @@ SMTP_HINTS = {
         "   exactly the mailbox SMTP_USER authenticates as - check .env.",
     "SMTPAuthenticationError":
         "   Login rejected. For Gmail use a 16-char App Password, not your\n"
-        "   account password (https://myaccount.google.com/apppasswords).",
+        "   account password (https://myaccount.google.com/apppasswords).\n"
+        "   With SMTP_AUTH=xoauth2, reconnect Gmail in the Agnostos app.",
     "SMTPServerDisconnected":
         "   The server dropped the connection, usually rate-limiting. Raise\n"
         "   SEND_DELAY_MIN/MAX, lower DAILY_SEND_CAP, and re-run to continue.",
@@ -638,7 +639,7 @@ def cmd_resend(args) -> int:
         s, smtp_host=s.resend_smtp_host, smtp_port=s.resend_smtp_port,
         smtp_security=s.resend_smtp_security, smtp_user=s.resend_smtp_user,
         smtp_password=s.resend_smtp_password, smtp_from=s.resend_smtp_from,
-        reply_to="", daily_send_cap=args.limit or s.resend_daily_cap,
+        smtp_auth="password", reply_to="", daily_send_cap=args.limit or s.resend_daily_cap,
         send_delay_min=args.delay_min if args.delay_min is not None else s.send_delay_min,
         send_delay_max=args.delay_max if args.delay_max is not None else s.send_delay_max)
     _h(f"RESEND ORIGINAL EMAILS FROM {alt.smtp_from or '?'} "
@@ -1132,7 +1133,7 @@ def cmd_legacy(args) -> int:
         alt = replace(s, smtp_host=s.resend_smtp_host, smtp_port=s.resend_smtp_port,
                       smtp_security=s.resend_smtp_security, smtp_user=s.resend_smtp_user,
                       smtp_password=s.resend_smtp_password, smtp_from=s.resend_smtp_from,
-                      reply_to="")
+                      smtp_auth="password", reply_to="")
         def approved(r):
             return str(r.get("Approved") or "").strip().lower() in {"y", "yes", "true", "1", "x"}
         # --approve-all only covers addresses the finder verified; anything typed in
@@ -1390,7 +1391,20 @@ def cmd_tls_check(args) -> int:
     hosts = [(settings.smtp_host, settings.smtp_port), (imap, settings.imap_port),
              (urlparse(settings.base_url or "https://api.openai.com").hostname, 443),
              ("api.openalex.org", 443)]
-    bad = 0
+    oauth_file = settings.google_oauth_token_file if settings.smtp_auth == "xoauth2" else ""
+    if settings.smtp_auth == "xoauth2":
+        from .google_oauth import DEFAULT_TOKEN_URI
+        token_uri = DEFAULT_TOKEN_URI
+        try:
+            from .google_oauth import load_token_file
+            token_uri = load_token_file(oauth_file).get("token_uri") or DEFAULT_TOKEN_URI
+        except Exception as exc:
+            print(_safe(f"   FAIL   GOOGLE_OAUTH_TOKEN_FILE  {exc}"))
+            oauth_file = ""
+        parsed = urlparse(token_uri)
+        if parsed.scheme == "https":
+            hosts.append((parsed.hostname, parsed.port or 443))
+    bad = 0 if settings.smtp_auth != "xoauth2" or oauth_file else 1
     for host, port in hosts:
         if not host:
             continue
@@ -1404,6 +1418,14 @@ def cmd_tls_check(args) -> int:
         except Exception as exc:
             bad += 1
             print(_safe(f"   FAIL   {host}:{port}  {type(exc).__name__}: {exc}"))
+    if oauth_file:
+        from .google_oauth import access_token
+        try:
+            access_token(oauth_file)
+            print("   ok     Gmail OAuth token refresh (SMTP_AUTH=xoauth2)")
+        except Exception as exc:
+            bad += 1
+            print(_safe(f"   FAIL   Gmail OAuth token refresh  {type(exc).__name__}: {exc}"))
     if bad:
         print("\n Fixes:  pip install -U truststore certifi")
         print("   macOS python.org build: run '/Applications/Python 3.x/Install Certificates.command'")
@@ -1432,7 +1454,10 @@ def cmd_check_replies(args) -> int:
             found = checker.check(rows, progress=progress)
     except Exception as exc:
         print(f"\n ERROR: IMAP failed: {type(exc).__name__}: {exc}")
-        print(" Set IMAP_HOST / IMAP_USER / IMAP_PASSWORD in .env if they differ from SMTP.")
+        if settings.smtp_auth == "xoauth2":
+            print(" SMTP_AUTH=xoauth2: reconnect Gmail in the Agnostos app if the token was revoked.")
+        else:
+            print(" Set IMAP_HOST / IMAP_USER / IMAP_PASSWORD in .env if they differ from SMTP.")
         return 1
     print()
 

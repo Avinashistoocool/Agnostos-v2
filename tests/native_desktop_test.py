@@ -196,6 +196,29 @@ with workbook_operation(Path(sys.argv[1])):
         finally:
             window.close()
 
+    def test_branding_icon_banner_and_about(self):
+        from desktop_review.native import app_icon, app_version, asset_path
+        for name in ("agnostos.ico", "agnostos-icon.png", "agnostos-banner.png"):
+            self.assertTrue(asset_path(name).is_file(), name)
+        with patch.object(sys, "_MEIPASS", str(self.scratch), create=True):
+            self.assertEqual(asset_path("x.png"), self.scratch / "assets" / "x.png")
+        self.assertFalse(app_icon().isNull())
+        window = DesktopWindow(self.workspace)
+        try:
+            self.assertFalse(window.windowIcon().isNull())
+            self.assertEqual(window.banner.objectName(), "banner")
+            self.assertIsNotNone(window.banner.pixmap())
+            self.assertFalse(window.banner.pixmap().isNull())
+            self.assertEqual(window.banner.pixmap().height(), 110)
+            self.assertNotEqual(app_version(), "unknown")
+            from PySide6.QtWidgets import QMessageBox
+            with patch.object(QMessageBox, "exec", return_value=0):
+                box = window.show_about()
+            self.assertIn(app_version(), box.text())
+            self.assertFalse(box.iconPixmap().isNull())
+        finally:
+            window.close()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -18,6 +18,10 @@ if (-not $shell) { throw "Chromium headless shell was not installed" }
     --specpath build\desktop-review `
     --add-data "$($shell.FullName);playwright-browsers\$($shell.Name)" `
     --add-data "$PSScriptRoot\sources.yaml;." `
+    --icon "$PSScriptRoot\docs\assets\agnostos.ico" `
+    --add-data "$PSScriptRoot\docs\assets\agnostos.ico;assets" `
+    --add-data "$PSScriptRoot\docs\assets\agnostos-icon.png;assets" `
+    --add-data "$PSScriptRoot\docs\assets\agnostos-banner.png;assets" `
     --add-data "$PSScriptRoot\LICENSE;licenses" `
     --add-data "$PSScriptRoot\docs\licenses;licenses" `
     --collect-submodules outreach --collect-submodules openpyxl `

@@ -16,6 +16,7 @@ from email.utils import formataddr, formatdate, make_msgid
 from pathlib import Path
 
 from .config import Settings
+from .google_oauth import load_token_file, smtp_authenticate, uses_xoauth2
 from .resume_parser import ResumeProfile
 from .schedule import fmt_duration as _fmt
 from .tls import context as tls_context
@@ -66,12 +67,18 @@ class Mailer:
     def connect(self):
         if self.dry_run:
             return
-        missing = [k for k, v in {
+        required = {
             "SMTP_HOST": self.s.smtp_host,
             "SMTP_USER": self.s.smtp_user,
-            "SMTP_PASSWORD": self.s.smtp_password,
             "SMTP_FROM": self.s.smtp_from,
-        }.items() if not v or "your_" in str(v) or "your-university" in str(v)]
+        }
+        if uses_xoauth2(self.s):
+            # Fail fast with a clear message rather than retrying a config error.
+            load_token_file(getattr(self.s, "google_oauth_token_file", ""))
+        else:
+            required["SMTP_PASSWORD"] = self.s.smtp_password
+        missing = [k for k, v in required.items()
+                   if not v or "your_" in str(v) or "your-university" in str(v)]
         if missing:
             raise RuntimeError(
                 f"SMTP settings still at placeholder values in .env: {', '.join(missing)}")
@@ -100,7 +107,11 @@ class Mailer:
             if self.s.smtp_security.lower() == "starttls":
                 self._server.starttls(context=context)
                 self._server.ehlo()
-        self._server.login(self.s.smtp_user, self.s.smtp_password)
+        if uses_xoauth2(self.s):
+            smtp_authenticate(self._server, self.s.smtp_user, self.s.google_oauth_token_file,
+                              timeout=timeout)
+        else:
+            self._server.login(self.s.smtp_user, self.s.smtp_password)
 
     def close(self):
         if self._server:

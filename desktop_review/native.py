@@ -3,8 +3,10 @@ from __future__ import annotations
 
 from html.parser import HTMLParser
 from pathlib import Path
+import sys
 
 from PySide6.QtCore import QTimer, Qt
+from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QFileDialog, QFormLayout,
     QGroupBox, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
@@ -29,6 +31,30 @@ def suggestion() -> str | None:
             except ReviewError:
                 pass
     return None
+
+
+def asset_path(name: str) -> Path:
+    """Locate a bundled branding asset in a PyInstaller build or source checkout."""
+    bundle = getattr(sys, "_MEIPASS", None)
+    if bundle:
+        return Path(bundle) / "assets" / name
+    return Path(__file__).resolve().parents[1] / "docs" / "assets" / name
+
+
+def app_icon() -> QIcon:
+    for name in ("agnostos.ico", "agnostos-icon.png"):
+        path = asset_path(name)
+        if path.is_file():
+            return QIcon(str(path))
+    return QIcon()
+
+
+def app_version() -> str:
+    try:
+        from outreach import __version__
+        return __version__
+    except Exception:
+        return "unknown"
 
 
 class ConversationText(HTMLParser):
@@ -71,9 +97,21 @@ class DesktopWindow(QMainWindow):
         self._asked_prompt: tuple[str, str] | None = None
         self._controls = {}
         self.setWindowTitle("Agnostos v2 · Desktop")
+        self.setWindowIcon(app_icon())
         self.resize(1250, 850)
+        help_menu = self.menuBar().addMenu("&Help")
+        self.about_action = help_menu.addAction("About Agnostos", self.show_about)
         shell = QWidget()
         main = QVBoxLayout(shell)
+        self.banner = QLabel()
+        self.banner.setObjectName("banner")
+        self.banner.setAlignment(Qt.AlignCenter)
+        banner = QPixmap(str(asset_path("agnostos-banner.png")))
+        if not banner.isNull():
+            self.banner.setPixmap(banner.scaledToHeight(110, Qt.SmoothTransformation))
+        else:
+            self.banner.setText("agnostos")
+        main.addWidget(self.banner)
         top = QHBoxLayout()
         title = QLabel("AGNOSTOS  /  DESKTOP")
         title.setObjectName("brand")
@@ -639,9 +677,22 @@ class DesktopWindow(QMainWindow):
         except ReviewError as exc:
             self.notify(exc)
 
+    def show_about(self):
+        box = QMessageBox(self)
+        box.setWindowTitle("About Agnostos")
+        box.setWindowIcon(app_icon())
+        banner = QPixmap(str(asset_path("agnostos-banner.png")))
+        if not banner.isNull():
+            box.setIconPixmap(banner.scaledToWidth(420, Qt.SmoothTransformation))
+        box.setText(f"Agnostos v2 Desktop\nVersion {app_version()}\n\n"
+                    "Research outreach, done honestly.")
+        box.exec()
+        return box
+
 
 def launch(workspace: Workspace) -> int:
     app = QApplication.instance() or QApplication([])
+    app.setWindowIcon(app_icon())
     window = DesktopWindow(workspace)
     window.show()
     return app.exec()

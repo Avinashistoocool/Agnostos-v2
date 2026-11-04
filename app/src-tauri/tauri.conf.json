@@ -1,0 +1,60 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Agnostos",
+  "version": "2.2.0",
+  "identifier": "app.agnostos.desktop",
+  "build": {
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Agnostos",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 1024,
+        "minHeight": 680,
+        "center": true,
+        "resizable": true,
+        "dragDropEnabled": true,
+        "decorations": true,
+        "theme": "Dark",
+        "backgroundColor": "#16171b"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: https://avatars.githubusercontent.com https://lh3.googleusercontent.com; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-src 'self'; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "publisher": "Avinash Chandra Gupta",
+    "copyright": "Copyright (c) 2026 Avinash Chandra Gupta",
+    "category": "Productivity",
+    "shortDescription": "research outreach, done honestly",
+    "longDescription": "Agnostos: research outreach, done honestly.",
+    "license": "MIT",
+    "licenseFile": "../../LICENSE",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "externalBin": ["binaries/agnostos-engine"],
+    "windows": {
+      "webviewInstallMode": { "type": "downloadBootstrapper" },
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico"
+      }
+    }
+  }
+}

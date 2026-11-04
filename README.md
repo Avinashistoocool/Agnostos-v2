@@ -576,6 +576,8 @@ Every setting lives in `.env` (see `.env.example`, which is split into a require
 | `LLM_PROVIDER` | `groq` | `groq` (free) or `openai` |
 | `GROQ_API_KEY` / `OPENAI_API_KEY` | — | Whichever provider you chose |
 | `SMTP_HOST/USER/PASSWORD/FROM` | — | Required only for `send --live` |
+| `SMTP_AUTH` | `password` | `password` (SMTP_PASSWORD) or `xoauth2` (Gmail OAuth, see below) |
+| `GOOGLE_OAUTH_TOKEN_FILE` | — | Token JSON written by the app's "connect Gmail"; used when `SMTP_AUTH=xoauth2` |
 | `OPENAI_BASE_URL` | — | Optional: Azure/OpenRouter/proxy endpoint |
 | `DRAFT_MODEL` | provider default | Leave blank unless you have a preference |
 | `SCORE_MODEL` | provider default | |
@@ -602,6 +604,20 @@ Every setting lives in `.env` (see `.env.example`, which is split into a require
 | `IMAP_FOLDERS` | `INBOX;SPAM;Junk;Junk Email` | Folders to scan for replies |
 | `SEND_MIN_PROBABILITY` | `0` | Standing quality floor |
 | `RESPECT_ROBOTS` | `true` | Mode A |
+
+### Gmail via OAuth (no app password)
+
+The desktop app's **Sign in with Google + connect Gmail** stores a refresh token; the CLI then sends and reads mail with SASL `XOAUTH2` instead of a password:
+
+```
+SMTP_AUTH=xoauth2
+GOOGLE_OAUTH_TOKEN_FILE=C:\path\to\gmail_token.json
+SMTP_HOST=smtp.gmail.com
+SMTP_USER=you@gmail.com
+SMTP_FROM=you@gmail.com
+```
+
+The token file is JSON: `{"client_id": "...", "client_secret": "...", "refresh_token": "...", "token_uri": "https://oauth2.googleapis.com/token"}` (`token_uri` optional). Access tokens are refreshed automatically and cached in memory until a minute before they expire. SMTP, `check-replies`/`replies` (IMAP) and `tls-check` all use it; `SMTP_PASSWORD`/`IMAP_PASSWORD` are ignored. If Google reports `invalid_grant` (access revoked or expired), reconnect Gmail in the app. The `resend` account still uses `RESEND_SMTP_PASSWORD`.
 
 Missing files, missing keys, and placeholder values left over from `.env.example` are all detected up front and reported as a single clear `CONFIG:` message, rather than failing deep inside an API or SMTP call. Never commit `.env` — it is git-ignored.
 

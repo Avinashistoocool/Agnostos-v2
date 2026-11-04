@@ -195,6 +195,9 @@ class Settings:
     smtp_user: str = os.getenv("SMTP_USER", "")
     smtp_password: str = os.getenv("SMTP_PASSWORD", "")
     smtp_security: str = os.getenv("SMTP_SECURITY", "starttls")  # starttls | ssl | none
+    # password = SMTP_PASSWORD login; xoauth2 = Gmail OAuth via GOOGLE_OAUTH_TOKEN_FILE.
+    smtp_auth: str = os.getenv("SMTP_AUTH", "password").strip().lower() or "password"
+    google_oauth_token_file: str = os.getenv("GOOGLE_OAUTH_TOKEN_FILE", "").strip()
     smtp_timeout: float = _f("SMTP_TIMEOUT", 60)
     smtp_from: str = os.getenv("SMTP_FROM", "")
     smtp_from_name: str = os.getenv("SMTP_FROM_NAME", "")
@@ -261,6 +264,9 @@ class Settings:
             self.draft_model = spec["default_model"]
         if not self.score_model:
             self.score_model = spec["default_model"]
+        if self.smtp_auth not in {"password", "xoauth2"}:
+            raise ValueError(
+                f"Unknown SMTP_AUTH {self.smtp_auth!r}. Choose one of: password, xoauth2")
 
     @property
     def api_key(self) -> str:

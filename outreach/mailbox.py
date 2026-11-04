@@ -18,6 +18,14 @@ def _is_gmail(host: str) -> bool:
     return "gmail" in (host or "").lower() or "googlemail" in (host or "").lower()
 
 
+def imap_login(conn: imaplib.IMAP4, settings, user: str, password: str):
+    """LOGIN with a password, or AUTHENTICATE XOAUTH2 when SMTP_AUTH=xoauth2."""
+    from .google_oauth import imap_authenticate, uses_xoauth2
+    if uses_xoauth2(settings):
+        return imap_authenticate(conn, user, getattr(settings, "google_oauth_token_file", ""))
+    return conn.login(user, password)
+
+
 def find_folder(conn: imaplib.IMAP4, flag: str, fallback: str) -> str:
     """Folder name carrying an IMAP special-use flag (\\Sent, \\Junk), e.g. "[Gmail]/Sent Mail"."""
     typ, data = conn.list()
@@ -45,7 +53,7 @@ class SentArchiver:
         from .tls import context
         self.conn = imaplib.IMAP4_SSL(self.host, self.s.imap_port, ssl_context=context(),
                                       timeout=60)
-        self.conn.login(self.user, self.password)
+        imap_login(self.conn, self.s, self.user, self.password)
         self.folder = find_folder(self.conn, "\\Sent", "Sent")
         self.conn.select(f'"{self.folder}"', readonly=True)
         return self
