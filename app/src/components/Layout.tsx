@@ -25,7 +25,7 @@ const NAV = [
   { to: "/replies", label: "Replies", icon: Reply },
   { to: "/conversations", label: "Conversations", icon: MessagesSquare },
   { to: "/pipeline", label: "Pipeline", icon: Workflow },
-  { to: "/jobs", label: "Jobs", icon: Terminal },
+  { to: "/jobs", label: "Activity", icon: Terminal },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 

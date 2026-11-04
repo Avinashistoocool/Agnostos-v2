@@ -4,7 +4,8 @@ import { FolderOpen, Info, KeyRound, LogOut, Mail, SlidersHorizontal, Target, Us
 import { useSession } from "../lib/session";
 import { toEngineError } from "../lib/engine";
 import type { Profile, Settings } from "../lib/types";
-import { Badge, Button, Card, ConfirmDialog, Field, Input, PageHeader, Skeleton } from "../components/ui";
+import { Badge, Button, Card, ConfirmDialog, Field, Input, PageHeader, Skeleton, Toggle } from "../components/ui";
+import { useDevMode } from "../lib/dev";
 import { useToast } from "../components/Toast";
 import { cn } from "../lib/util";
 import { diffSettings, EmailForm, FundingForm, LimitsForm, LlmForm, ProfileForm, TargetsForm } from "../components/forms";
@@ -33,6 +34,7 @@ export function SettingsScreen() {
   const [origProfile, setOrigProfile] = useState<Profile | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmOut, setConfirmOut] = useState(false);
+  const [dev, setDev] = useDevMode();
 
   useEffect(() => {
     void Promise.all([engine.call("settings.get"), engine.call("profile.get")])
@@ -150,6 +152,7 @@ export function SettingsScreen() {
         <p className="text-xs leading-relaxed text-slate">
           Agnostos never invents achievements, never sends without your say-so, and keeps every credential on this computer.
         </p>
+        <Toggle id="dev-mode" checked={dev} onChange={setDev} label="Developer mode" description="Show raw engine logs on the Activity page (for testing and troubleshooting)." />
       </div>
     );
 

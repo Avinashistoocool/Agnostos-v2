@@ -55,6 +55,24 @@ def validate_job(args: list[str]) -> tuple[Path, Path] | None:
     return workspace.path, job_file
 
 
+def ensure_default_workbook(args: list[str]) -> Path | None:
+    """With no --xlsx given, start a fresh empty professor workbook if none exists yet."""
+    if "--xlsx" in args or not args or args[0] == "discover":
+        return None
+    target = os.environ.get("TARGET_XLSX", "").strip()
+    if not target:
+        return None
+    path = Path(target)
+    if path.exists():
+        return None
+    from outreach.excel_io import write_new_workbook
+    write_new_workbook(path, [])
+    print(f" Created a new, empty professor workbook: {path.name}")
+    if args[0] == "run" and "scrape" not in args:
+        print(" It has no professors yet. Run \"Discover professors\" first to fill it.")
+    return path
+
+
 def run_worker(args: list[str]) -> int:
     _utf8_stdio()
     checked = validate_job(args)
@@ -72,6 +90,7 @@ def run_worker(args: list[str]) -> int:
     from outreach.cli import main as cli_main
     try:
         with InstanceLock(workspace / "output" / ".desktop_cli.lock"):
+            ensure_default_workbook(args)
             code = cli_main(args)
     except AlreadyRunning:
         print("Another desktop CLI job is already running in this workspace.")

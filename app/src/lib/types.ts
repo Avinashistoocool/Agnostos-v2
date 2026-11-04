@@ -33,6 +33,7 @@ export type CommandField = {
   type: "bool" | "int" | "float" | "str" | "choice";
   label: string;
   help?: string;
+  required?: boolean;
   default?: unknown;
   choices?: string[];
   min?: number;

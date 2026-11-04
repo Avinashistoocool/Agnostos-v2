@@ -46,6 +46,8 @@ MIN_ONE = {"limit", "top", "count", "batches", "max_professors", "workers", "per
            "per_failure", "max_pages", "prioritize_top", "min_days"}
 INT_MAX = {"limit": 40}
 EXCLUDED_TYPES = {"list"}
+# Choice fields always carry a value; everything else has a sensible default.
+REQUIRED = {"mode", "provider", "who"}
 
 
 def confirmation_for(command: str) -> str | None:
@@ -76,8 +78,12 @@ def field_spec(name: str, typ: str) -> dict | None:
         out["type"] = "str"
         if typ in ("file", "resume"):
             out["help"] = "Path (relative to your workspace)." if typ == "file" else "Resume path (defaults to your imported resume)."
+    if name == "xlsx":
+        out["help"] = "Leave empty to use your workspace sheet (a new one is created if needed)."
     if name in HELP:
         out["help"] = HELP[name]
+    if name in REQUIRED:
+        out["required"] = True
     return out
 
 

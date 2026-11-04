@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 const shot = (page: Page, name: string) => page.screenshot({ path: `screenshots/${name}.png` });
 
 test("full flow against the mock engine", async ({ page }) => {
-  await page.goto("/?fast");
+  await page.goto("/?fast&dev");
 
   // Sign-in
   await expect(page.getByText("research outreach, done honestly")).toBeVisible();
@@ -137,7 +137,7 @@ test("full flow against the mock engine", async ({ page }) => {
 });
 
 test("GitHub device flow shows the code and signs in", async ({ page }) => {
-  await page.goto("/?fast");
+  await page.goto("/?fast&dev");
   await page.getByTestId("github").click();
   await expect(page.getByTestId("gh-code")).toHaveText("WDJB-MJHT");
   await shot(page, "16-github-device");

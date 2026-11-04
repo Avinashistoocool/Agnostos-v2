@@ -65,6 +65,7 @@ export function Field({
   children,
   htmlFor,
   className,
+  required,
 }: {
   label: ReactNode;
   hint?: ReactNode;
@@ -72,11 +73,17 @@ export function Field({
   children: ReactNode;
   htmlFor?: string;
   className?: string;
+  required?: boolean;
 }) {
   return (
     <div className={className}>
       <label htmlFor={htmlFor} className="label">
         {label}
+        {required && (
+          <span className="ml-0.5 text-[#e07a62]" aria-hidden="true">
+            *
+          </span>
+        )}
       </label>
       {children}
       {error ? <p className="mt-1.5 text-xs text-[#e07a62]">{error}</p> : hint ? <p className="mt-1.5 text-xs text-slate">{hint}</p> : null}

@@ -17,14 +17,18 @@ if ($LASTEXITCODE -ne 0) {
     if ($LASTEXITCODE -ne 0) { throw "Engine dependencies failed to install" }
 }
 
+$ErrorActionPreference = "Continue"
 & $Python -m PyInstaller --noconfirm --clean --distpath dist\engine --workpath build\engine-pyi `
-    desktop_engine\agnostos-engine.spec
+    desktop_engine\agnostos-engine.spec 2>&1 | ForEach-Object { "$_" }
+$ErrorActionPreference = "Stop"
 if ($LASTEXITCODE -ne 0) { throw "Engine build failed" }
 
 $exe = "dist\engine\agnostos-engine.exe"
 if (-not (Test-Path $exe -PathType Leaf)) { throw "Missing $exe" }
 
-$probe = '{"id":1,"method":"ping","params":{}}' | & $exe
+$ErrorActionPreference = "Continue"
+$probe = '{"id":1,"method":"ping","params":{}}' | & $exe 2>$null
+$ErrorActionPreference = "Stop"
 if ($LASTEXITCODE -ne 0 -or -not ($probe -match '"ok":true')) { throw "Engine smoke test failed: $probe" }
 
 $target = "app\src-tauri\binaries\agnostos-engine-x86_64-pc-windows-msvc.exe"

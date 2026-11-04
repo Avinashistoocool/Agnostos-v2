@@ -104,6 +104,8 @@ export function RunDialog({ spec, onClose }: { spec: CommandSpec; onClose: () =>
   const blocking = jobs.find(isActive);
 
   const visibleFields = spec.fields.filter((f) => f.name !== spec.live_field);
+  const basicFields = visibleFields.filter((f) => !ADVANCED.has(f.name));
+  const advancedFields = visibleFields.filter((f) => ADVANCED.has(f.name));
   const liveField = spec.fields.find((f) => f.name === spec.live_field);
 
   const start = async () => {
@@ -155,10 +157,21 @@ export function RunDialog({ spec, onClose }: { spec: CommandSpec; onClose: () =>
         </div>
       )}
       <div className="space-y-4">
-        {visibleFields.map((f) => (
+        {basicFields.map((f) => (
           <FieldInput key={f.name} f={f} value={opts[f.name]} onChange={(v) => setOpts((o) => ({ ...o, [f.name]: v }))} />
         ))}
         {visibleFields.length === 0 && !liveField && <p className="text-xs text-slate-dim">No options. Just run it.</p>}
+        {basicFields.length > 0 && <p className="text-[11px] text-slate-dim"><span className="text-[#e07a62]">*</span> required. Everything else is optional.</p>}
+        {advancedFields.length > 0 && (
+          <details className="group rounded-lg border border-line bg-ink/30 px-4 py-3">
+            <summary className="cursor-pointer select-none text-xs text-slate hover:text-cream">Advanced options (files, sheets, model)</summary>
+            <div className="mt-4 space-y-4">
+              {advancedFields.map((f) => (
+                <FieldInput key={f.name} f={f} value={opts[f.name]} onChange={(v) => setOpts((o) => ({ ...o, [f.name]: v }))} />
+              ))}
+            </div>
+          </details>
+        )}
       </div>
       {liveField && (
         <div
@@ -203,12 +216,15 @@ export function RunDialog({ spec, onClose }: { spec: CommandSpec; onClose: () =>
   );
 }
 
+const ADVANCED = new Set(["xlsx", "sheet", "sources", "output", "export_dir", "resume", "model", "provider", "no_enrich", "no_profile_hop", "at", "preview", "workers", "min_score", "prestige_weight", "top_universities", "max_pages", "since", "min_works", "min_h_index", "also_universities", "list_universities", "fresh"]);
+
 function FieldInput({ f, value, onChange }: { f: CommandField; value: unknown; onChange: (v: unknown) => void }) {
   const id = `f-${f.name}`;
+  const req = !!f.required;
   if (f.type === "bool") return <Toggle id={id} checked={!!value} onChange={onChange} label={f.label} description={f.help} />;
   if (f.type === "choice")
     return (
-      <Field label={f.label} hint={f.help} htmlFor={id}>
+      <Field label={f.label} hint={f.help} htmlFor={id} required={req}>
         <Select id={id} value={String(value ?? "")} onChange={(e) => onChange(e.target.value)}>
           {(f.choices ?? []).map((c) => (
             <option key={c} value={c}>
@@ -222,7 +238,7 @@ function FieldInput({ f, value, onChange }: { f: CommandField; value: unknown; o
     const n = value === undefined || value === null || value === "" ? "" : String(value);
     const bad = n !== "" && ((f.min !== undefined && Number(n) < f.min) || (f.max !== undefined && Number(n) > f.max));
     return (
-      <Field label={f.label} hint={f.help ?? (f.min !== undefined && f.max !== undefined ? `${f.min}–${f.max}` : undefined)} error={bad ? `Must be between ${f.min} and ${f.max}` : undefined} htmlFor={id}>
+      <Field label={f.label} required={req} hint={f.help ?? (f.min !== undefined && f.max !== undefined ? `${f.min}–${f.max}` : undefined)} error={bad ? `Must be between ${f.min} and ${f.max}` : undefined} htmlFor={id}>
         <Input
           id={id}
           type="number"
@@ -237,7 +253,7 @@ function FieldInput({ f, value, onChange }: { f: CommandField; value: unknown; o
     );
   }
   return (
-    <Field label={f.label} hint={f.help} htmlFor={id}>
+    <Field label={f.label} hint={f.help} htmlFor={id} required={req}>
       <Input id={id} value={String(value ?? "")} onChange={(e) => onChange(e.target.value)} />
     </Field>
   );

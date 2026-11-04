@@ -1,13 +1,36 @@
 import { useEffect, useRef, useState } from "react";
+import type { RefObject } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { CircleHelp, Square, Terminal } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CircleHelp, GraduationCap, Square, Terminal } from "lucide-react";
 import { useSession } from "../lib/session";
 import { toEngineError } from "../lib/engine";
 import { isActive, useJobs } from "../lib/jobs";
-import type { Job } from "../lib/types";
+import { useDevMode } from "../lib/dev";
+import type { Job, Professor } from "../lib/types";
 import { Badge, Button, Card, EmptyState, PageHeader, Skeleton, Spinner } from "../components/ui";
 import { useToast } from "../components/Toast";
 import { cn, fmtDate } from "../lib/util";
+
+export const TITLES: Record<string, string> = {
+  discover: "Find professors",
+  verify: "Verify emails",
+  recheck: "Recheck professors",
+  "replace-failed": "Replace failed addresses",
+  legacy: "Senior researchers",
+  "legacy-researchers": "Senior researchers",
+  profile: "Read resume",
+  run: "Match & draft emails",
+  models: "List AI models",
+  send: "Send emails",
+  resend: "Resend emails",
+  "check-replies": "Check replies",
+  replies: "Draft replies",
+  conversations: "Update conversations",
+  "archive-sent": "Archive sent mail",
+  stats: "Statistics",
+  "tls-check": "Connection check",
+  "calendar-auth": "Connect Google Calendar",
+};
 
 export function JobStatusBadge({ job }: { job: Job }) {
   switch (job.status) {
@@ -38,7 +61,7 @@ export function Jobs() {
 
   return (
     <>
-      <PageHeader title="Jobs" subtitle="Everything Agnostos has run, with full logs." />
+      <PageHeader title="Activity" subtitle="What Agnostos is working on, and what it has finished." />
       {loading && !jobs.length ? (
         <Card className="p-6">
           <Skeleton className="h-4 w-40" />
@@ -66,7 +89,7 @@ export function Jobs() {
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 truncate text-sm text-cream">
-                        {j.command}
+                        {TITLES[j.command] ?? j.command}
                         {j.live && <span className="rounded bg-rust px-1 text-[9px] font-semibold uppercase text-cream">live</span>}
                       </div>
                       <div className="text-[11px] text-slate">{fmtDate(j.started)}</div>
@@ -93,6 +116,7 @@ function JobDetail({ job }: { job: Job }) {
   const [follow, setFollow] = useState(true);
   const [answering, setAnswering] = useState<"y" | "n" | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [dev] = useDevMode();
 
   useEffect(() => {
     void loadLog(job.id).catch(() => {});
@@ -130,7 +154,7 @@ function JobDetail({ job }: { job: Job }) {
     <div className="flex min-w-0 flex-col gap-4">
       <Card className="p-5">
         <div className="flex flex-wrap items-center gap-3">
-          <h2 className="font-serif text-xl text-cream">{job.command}</h2>
+          <h2 className="font-serif text-xl text-cream">{TITLES[job.command] ?? job.command}</h2>
           <JobStatusBadge job={job} />
           {job.live ? <Badge tone="rust">Live</Badge> : <Badge>Safe</Badge>}
           <div className="flex-1" />
@@ -143,9 +167,9 @@ function JobDetail({ job }: { job: Job }) {
         <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate">
           <span>Started {fmtDate(job.started)}</span>
           {job.finished && <span>Finished {fmtDate(job.finished)}</span>}
-          {job.exit_code !== undefined && job.exit_code !== null && <span>Exit code {job.exit_code}</span>}
+          {dev && job.exit_code !== undefined && job.exit_code !== null && <span>Exit code {job.exit_code}</span>}
         </div>
-        {opts.length > 0 && (
+        {dev && opts.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {opts.map(([k, v]) => (
               <span key={k} className="rounded-md border border-line bg-ink/60 px-2 py-0.5 font-mono text-[11px] text-slate">
@@ -174,6 +198,153 @@ function JobDetail({ job }: { job: Job }) {
         </div>
       )}
 
+      {dev ? (
+        <RawLog job={job} lines={lines} box={box} follow={follow} setFollow={setFollow} />
+      ) : (
+        <FriendlyProgress job={job} lines={lines} />
+      )}
+    </div>
+  );
+}
+
+const STAGES: [RegExp, string][] = [
+  [/STEP 1\/6|RESUME PARSE/, "Reading your resume"],
+  [/STEP 2\/6/, "Loading professors"],
+  [/STEP 3\/6/, "Looking up their recent papers"],
+  [/STEP 4\/6/, "Picking the best matches"],
+  [/STEP 5\/6/, "Writing personalised emails"],
+  [/STEP 6\/6/, "Saving results"],
+  [/DISCOVER TARGETS/, "Finding professors in your field"],
+  [/DISCOVERY DONE/, "Wrapping up"],
+  [/EMAIL VERIFICATION/, "Checking email addresses"],
+  [/RECHECK PROFESSORS/, "Re-checking professors"],
+  [/REPLACE UNREACHABLE/, "Finding replacements"],
+  [/CHECK REPLIES/, "Checking your inbox for replies"],
+  [/READ CONVERSATIONS/, "Reading conversations and drafting replies"],
+  [/BUILD CONVERSATIONS/, "Building your conversations view"],
+  [/LEGACY RESEARCHERS: FIND/, "Finding senior researchers"],
+  [/LEGACY RESEARCHERS: DRAFT/, "Drafting letters"],
+  [/COPY SENT EMAILS/, "Copying sent emails"],
+  [/SEND|DRY RUN|LIVE MODE/, "Preparing emails"],
+];
+
+const PRODUCES_PROFESSORS = new Set(["discover", "run", "verify", "recheck", "replace-failed", "legacy", "legacy-researchers"]);
+
+export function friendlyStage(lines: string[] | undefined): string | null {
+  if (!lines) return null;
+  for (let i = lines.length - 1; i >= 0; i--) for (const [re, label] of STAGES) if (re.test(lines[i])) return label;
+  return null;
+}
+
+function lastProblem(lines: string[] | undefined): string | null {
+  if (!lines) return null;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const l = lines[i].trim();
+    if (!l || /^=+$/.test(l) || /^Traceback|^\s*File "/.test(l)) continue;
+    if (/error|failed|not found|refusing|aborting|nothing|no professors|not set|needs/i.test(l)) return l.replace(/^[!\s]+/, "");
+  }
+  return null;
+}
+
+function FriendlyProgress({ job, lines }: { job: Job; lines: string[] | undefined }) {
+  const nav = useNavigate();
+  const stage = friendlyStage(lines);
+  const active = isActive(job);
+  const done = job.status === "done";
+  const failed = job.status === "failed" || job.status === "interrupted";
+  const problem = failed ? lastProblem(lines) : null;
+  return (
+    <Card className="p-8" data-testid="job-progress">
+      <div className="flex flex-col items-center text-center">
+        {active ? (
+          <Spinner className="h-8 w-8" />
+        ) : done ? (
+          <CheckCircle2 className="h-9 w-9 text-sage" />
+        ) : failed ? (
+          <AlertTriangle className="h-9 w-9 text-[#e07a62]" />
+        ) : (
+          <Square className="h-8 w-8 text-slate" />
+        )}
+        <div className="mt-4 font-serif text-xl text-cream">
+          {active ? "Working on it…" : done ? "All done" : failed ? "That didn't work" : "Stopped"}
+        </div>
+        <div className="mt-1.5 text-sm text-slate">
+          {active ? stage ?? "Getting started" : done ? "Everything finished successfully." : failed ? problem ?? "Something went wrong. Check your settings and try again." : "This job was stopped."}
+        </div>
+        {done && PRODUCES_PROFESSORS.has(job.command) && (
+          <Button className="mt-6" variant="primary" icon={<GraduationCap className="h-4 w-4" />} onClick={() => nav("/professors")}>
+            View professors
+          </Button>
+        )}
+        {done && job.command === "replies" && (
+          <Button className="mt-6" variant="primary" onClick={() => nav("/replies")}>
+            Review reply drafts
+          </Button>
+        )}
+      </div>
+      {PRODUCES_PROFESSORS.has(job.command) && (active || done) && <LiveProfessors active={active} />}
+    </Card>
+  );
+}
+
+function LiveProfessors({ active }: { active: boolean }) {
+  const { engine } = useSession();
+  const [items, setItems] = useState<Professor[] | null>(null);
+  const [total, setTotal] = useState(0);
+  useEffect(() => {
+    let stop = false;
+    const load = () =>
+      engine
+        .call("professors.list", { query: "", status: "", offset: 0, limit: 8 })
+        .then((r) => {
+          if (stop) return;
+          setItems(r.items);
+          setTotal(r.total);
+        })
+        .catch(() => {});
+    void load();
+    if (!active) return () => void (stop = true);
+    const t = setInterval(load, 4000);
+    return () => {
+      stop = true;
+      clearInterval(t);
+    };
+  }, [engine, active]);
+  if (!items || !items.length) return null;
+  return (
+    <div className="mt-8 border-t border-line pt-5">
+      <div className="mb-3 text-xs font-medium uppercase tracking-wider text-slate">
+        Your professors <span className="text-cream-dim">({total})</span>
+      </div>
+      <ul className="divide-y divide-line/60">
+        {items.map((p) => (
+          <li key={`${p.sheet}:${p.row}`} className="flex items-center gap-3 py-2.5 text-sm">
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-cream">{p.name}</div>
+              <div className="truncate text-xs text-slate">{[p.institution, p.country].filter(Boolean).join(" · ")}</div>
+            </div>
+            <span className="font-mono text-xs text-slate">{Math.round(p.probability * 100)}%</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function RawLog({
+  job,
+  lines,
+  box,
+  follow,
+  setFollow,
+}: {
+  job: Job;
+  lines: string[] | undefined;
+  box: RefObject<HTMLDivElement>;
+  follow: boolean;
+  setFollow: (v: boolean) => void;
+}) {
+  return (
       <div className="overflow-hidden rounded-xl border border-line bg-[#0f1013] shadow-card">
         <div className="flex items-center gap-2 border-b border-line px-4 py-2 text-xs text-slate">
           <Terminal className="h-3.5 w-3.5" /> Log
@@ -206,7 +377,6 @@ function JobDetail({ job }: { job: Job }) {
           )}
         </div>
       </div>
-    </div>
   );
 }
 
