@@ -271,6 +271,14 @@ function FriendlyProgress({ job, lines }: { job: Job; lines: string[] | undefine
         <div className="mt-1.5 text-sm text-slate">
           {active ? stage ?? "Getting started" : done ? "Everything finished successfully." : failed ? problem ?? "Something went wrong. Check your settings and try again." : "This job was stopped."}
         </div>
+        {failed && lines?.some((l) => /No professors found|Loaded 0 professors/.test(l)) && (
+          <div className="mt-6 flex flex-col items-center gap-3">
+            <p className="max-w-md text-sm text-cream-dim">Your professor list is empty. Find professors in your field first, then run Match &amp; draft again.</p>
+            <Button variant="primary" icon={<GraduationCap className="h-4 w-4" />} onClick={() => nav("/pipeline?cmd=discover")}>
+              Find professors
+            </Button>
+          </div>
+        )}
         {done && PRODUCES_PROFESSORS.has(job.command) && (
           <Button className="mt-6" variant="primary" icon={<GraduationCap className="h-4 w-4" />} onClick={() => nav("/professors")}>
             View professors

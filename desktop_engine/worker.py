@@ -68,8 +68,8 @@ def ensure_default_workbook(args: list[str]) -> Path | None:
     from outreach.excel_io import write_new_workbook
     write_new_workbook(path, [])
     print(f" Created a new, empty professor workbook: {path.name}")
-    if args[0] == "run" and "scrape" not in args:
-        print(" It has no professors yet. Run \"Discover professors\" first to fill it.")
+    if (args[0] == "run" and "scrape" not in args:
+        print(" It has no professors yet. Run \"Find professors\" (Discover) first to fill it.")
     return path
 
 
