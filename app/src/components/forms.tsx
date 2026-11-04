@@ -580,6 +580,17 @@ export function LlmForm({ s, set, save }: { s: Settings; set: SetS; save: () => 
         </Button>
         <TestResult r={result} />
       </div>
+      <Field
+        label="OpenAlex API key (for finding professors)"
+        htmlFor="openalex-key"
+        hint={
+          <button type="button" className="focus-ring inline-flex items-center gap-1 rounded text-rust-hover hover:underline" onClick={() => void engine.openUrl("https://openalex.org/settings/api")}>
+            Free key; without it searches get rate-limited <ExternalLink className="h-3 w-3" />
+          </button>
+        }
+      >
+        <SecretInput id="openalex-key" value={s.OPENALEX_API_KEY ?? ""} onChange={(v) => set({ OPENALEX_API_KEY: v })} />
+      </Field>
     </div>
   );
 }

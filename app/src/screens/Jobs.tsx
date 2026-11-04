@@ -271,6 +271,12 @@ function FriendlyProgress({ job, lines }: { job: Job; lines: string[] | undefine
         <div className="mt-1.5 text-sm text-slate">
           {active ? stage ?? "Getting started" : done ? "Everything finished successfully." : failed ? problem ?? "Something went wrong. Check your settings and try again." : "This job was stopped."}
         </div>
+        {lines?.some((l) => /OpenAlex rate limit/.test(l)) && (
+          <div className="mt-6 flex flex-col items-center gap-3">
+            <p className="max-w-md text-sm text-cream-dim">The professor database (OpenAlex) rate-limited the search. Add a free OpenAlex API key in Settings → AI model, then try again.</p>
+            <Button variant="secondary" onClick={() => nav("/settings")}>Open settings</Button>
+          </div>
+        )}
         {failed && lines?.some((l) => /No professors found|Loaded 0 professors/.test(l)) && (
           <div className="mt-6 flex flex-col items-center gap-3">
             <p className="max-w-md text-sm text-cream-dim">Your professor list is empty. Find professors in your field first, then run Match &amp; draft again.</p>

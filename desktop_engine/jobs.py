@@ -203,6 +203,11 @@ class JobManager:
             if lock_held(output / ".desktop_cli.lock"):
                 raise EngineError("conflict", "Another desktop CLI job is active in this workspace")
             env = child_environment(workspace)
+            if not env.get("DISCOVER_QUERIES"):
+                interests = [i for i in self.accounts.profile().get("research_interests", [])
+                             if 3 < len(i) < 70 and not re.search(r"projects?$", i, re.I)]
+                if interests:
+                    env["DISCOVER_QUERIES"] = "; ".join(interests[:8])
             if live and options.get("limit") is not None:
                 cap_key = "RESEND_DAILY_CAP" if command in {"resend", "legacy", "legacy-researchers"} \
                     else "DAILY_SEND_CAP"
