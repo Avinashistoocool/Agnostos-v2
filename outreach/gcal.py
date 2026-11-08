@@ -38,7 +38,14 @@ def service(interactive: bool = False):
     secret, token = _paths()
     creds = Credentials.from_authorized_user_file(str(token), SCOPES) if token.exists() else None
     if creds and creds.expired and creds.refresh_token:
-        creds.refresh(Request())
+        from google.auth.exceptions import RefreshError
+        try:
+            creds.refresh(Request())
+        except RefreshError:
+            # Testing-mode OAuth apps revoke refresh tokens after 7 days; sign in again.
+            if not interactive:
+                raise
+            creds = None
     if not creds or not creds.valid:
         if not interactive:
             raise RuntimeError("Google Calendar not authorised; run "
