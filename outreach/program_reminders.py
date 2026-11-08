@@ -148,6 +148,8 @@ def due_reminders(programs: Iterable[dict], today: date, sent: dict) -> list[Due
     Older unsent ones in the same track are superseded, never sent later."""
     out: list[Due] = []
     for p in programs:
+        if p.get("eligible") is False:
+            continue
         deadline = _date(p.get("deadline"))
         if deadline and deadline < today:
             continue
@@ -281,6 +283,8 @@ def digest_email(programs: list[dict], today: date, welcome: bool) -> tuple[str,
         subj = f"[Agnostos] Weekly digest: {len(items)} internship deadline(s) in the next {DIGEST_HORIZON} days"
         intro = f"Due between {today} and {end}:" if items else \
             f"Nothing is due in the next {DIGEST_HORIZON} days."
+    skipped = [p for p in items if p.get("eligible") is False]
+    items = [p for p in items if p.get("eligible") is not False]
     summary = []
     for p in items:
         dl = _date(p.get("deadline"))
@@ -290,6 +294,9 @@ def digest_email(programs: list[dict], today: date, welcome: bool) -> tuple[str,
     body = intro + "\n\n" + "\n".join(summary)
     if blocks:
         body += "\n\n" + "=" * 60 + "\n\n" + "\n\n".join(blocks)
+    if skipped:
+        body += ("\n\nNot eligible this cycle (no reminders sent):\n"
+                 + "\n".join(f"  {_label(p)}: {p.get('eligibility', '')}" for p in skipped))
     return subj, body + FOOTER
 
 
@@ -381,6 +388,8 @@ def calendar_bodies(programs: Iterable[dict], today: date) -> dict[str, dict]:
     """Every event the calendar should contain, keyed by a stable id."""
     out: dict[str, dict] = {}
     for p in programs:
+        if p.get("eligible") is False:
+            continue
         deadline = _date(p.get("deadline"))
         if not deadline or deadline < today:
             continue
