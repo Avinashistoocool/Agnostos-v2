@@ -430,6 +430,25 @@ When a professor says they can't fund you (or can only pay part), `replies` does
 
 Without the setup, meeting requests still go out. Only the calendar check and the holds are skipped.
 
+### `program-reminders`: internship deadline reminders
+
+```bash
+python -m outreach.cli program-reminders [--dry-run] [--calendar] [--now YYYY-MM-DD] [--programs PATH]
+```
+
+This reads `output/programs/internship_programs.json` (CERN, EPFL, ITER, ...) and emails reminders only to the owner's two fixed addresses. Mail goes out from the personal Gmail account (`RESEND_SMTP_*`).
+
+- **Welcome digest.** The first run sends one digest listing every programme, sorted by deadline.
+- **Weekly digest.** After that, a digest goes out once per ISO week (normally Monday). It covers everything due in the next 60 days.
+- **Milestone reminders.** You get an email when applications open, 21 days before the deadline if `referees_needed > 0` ("ask referees now"), and 30/14/7/3/1 days before each deadline. Each email includes the documents checklist, the link and the tailored CV path. The CV is looked up in `output/programs/cvs/<id>.pdf` first, then in `Dynamic-CV/program_cvs/CV_<id>.pdf`.
+- **Idempotency.** `output/programs/reminders_sent.json` records every (programme, milestone) pair. Each reminder is sent once. If runs were missed, you get only the most recent missed milestone; older ones are marked "superseded".
+- **Null deadlines.** Programmes with no deadline appear only in the digest.
+- **Phone notifications.** With `--calendar`, the command creates Google Calendar events: an all-day event on each deadline and a 09:00 IST event on each milestone day, all with popup and email reminders. The Calendar app on your phone then notifies you. Event ids are stored in `output/programs/calendar_events.json`, so changed events are updated, not duplicated. If the token in `output/gcal_token.json` has expired, run `python -m outreach.cli calendar-auth` again. Email still goes out in the meantime.
+- **Optional SMS.** Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `TWILIO_FROM` (env or `.env`) to also text +91 7023037566 through Twilio's REST API. If they're not set, SMS is skipped silently.
+- **Daily run.** The Windows Scheduled Task "Agnostos program reminders" runs `output/run_program_reminders.ps1` every day at 09:00. Its log is `output/program_reminders.log`.
+
+Tests: `python tests/program_reminders_test.py`.
+
 ### Reading every conversation
 
 Mail sent over SMTP doesn't appear in your mail app's **Sent** folder, so a professor's answer shows up without the email it answers. Two fixes:

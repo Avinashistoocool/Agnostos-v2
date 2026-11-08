@@ -622,6 +622,12 @@ def _tld_country(email: str) -> str:
     return tld.upper() if len(tld) == 2 else ""
 
 
+def cmd_program_reminders(args) -> int:
+    from .program_reminders import cmd_program_reminders as run_reminders
+    settings.ensure_dirs()
+    return run_reminders(args)
+
+
 def cmd_resend(args) -> int:
     """Re-deliver the ORIGINAL email (no redraft) from a second account to
     professors who never answered, and/or whose first mail bounced."""
@@ -1093,17 +1099,40 @@ def cmd_legacy(args) -> int:
         if named:
             legends += L.lookup_named(disc, named)
         have = {(r.get("OpenAlex ID") or r.get("Name") or "").lower() for r in rows}
-        legends = [lg for lg in legends if (lg.openalex_id or lg.name).lower() not in have]
+        have_names = {str(r.get("Name") or "").strip().lower() for r in rows}
+        sent_ids, sent_names, sent_emails = L.already_contacted(settings.output_dir)
+        legends = [lg for lg in legends if (lg.openalex_id or lg.name).lower() not in have
+                   and lg.name.strip().lower() not in have_names | sent_names
+                   and lg.openalex_id.rsplit("/", 1)[-1].lower() not in sent_ids - {""}]
         print(f" {len(legends)} new candidates. Fetching recent work...")
         L.add_recent_work(disc, legends)
         named_ids = {lg.openalex_id for lg in legends if lg.source == "you named them"}
         before = len(legends)
-        # People you named are always kept; the rest must actually be physicists.
-        legends = [lg for lg in legends if lg.openalex_id in named_ids or L.is_physics(lg)]
-        print(f" Physics filter: kept {len(legends)} of {before}.")
+        # People you named are always kept; the rest must actually be physicists
+        # unless --any-field (robotics, ML, interpretability searches).
+        if args.any_field:
+            import re
+            from .focus import OFF_FOCUS
+            legends = [lg for lg in legends if lg.openalex_id in named_ids or not re.search(
+                OFF_FOCUS, " ".join(lg.topics + lg.recent), re.I)]
+            print(f" Off-field filter (--any-field): kept {len(legends)} of {before}.")
+        else:
+            legends = [lg for lg in legends if lg.openalex_id in named_ids or L.is_physics(lg)]
+            print(f" Physics filter: kept {len(legends)} of {before}.")
+        if args.match:
+            import re
+            before = len(legends)
+            legends = [lg for lg in legends if lg.openalex_id in named_ids or re.search(
+                args.match, " ".join(lg.topics + lg.recent), re.I)]
+            print(f" --match filter: kept {len(legends)} of {before}.")
         disc.save_cache()
         print(" Looking up public addresses (strict name checks)...")
         L.find_emails(legends, workers=args.workers)
+        mailed = sent_emails | {str(r.get("Email") or "").strip().lower() for r in rows}
+        for lg in legends:
+            if lg.email and lg.email.lower() in mailed:
+                lg.email_notes = f"skipped {lg.email}: already contacted or already in legacy.xlsx"
+                lg.email, lg.email_status = "", "duplicate"
         rows = L.merge(rows, legends)
         L.save(path, rows)
         ok = sum(1 for r in rows if r.get("Email"))
@@ -1161,7 +1190,8 @@ def cmd_legacy(args) -> int:
                     todo, settings.output_dir / "send_log.csv",
                     daily_cap=min(s.daily_send_cap, s.resend_daily_cap),
                     limit=args.limit, window_spec=args.local_window or s.send_local_window or "9-17",
-                    focus_keywords=s.focus_keywords, history_rows=rows)
+                    focus_keywords=s.legacy_focus_keywords or s.focus_keywords,
+                    history_rows=rows)
             except ValueError as exc:
                 print(f" ERROR: {exc}")
                 return 1
@@ -2037,6 +2067,12 @@ def build_parser() -> argparse.ArgumentParser:
                     help="People you name yourself, e.g. \"Neil deGrasse Tyson; Fabiola Gianotti\"")
     lg.add_argument("--countries", help="Restrict region (default: worldwide)")
     lg.add_argument("--min-h", type=int, default=60, help="Minimum h-index (default 60)")
+    lg.add_argument("--any-field", action="store_true",
+                    help="With --find: keep non-physics candidates (robotics, ML, interpretability); "
+                         "clearly off-field ones (medicine, biology...) are still dropped")
+    lg.add_argument("--match", metavar="REGEX",
+                    help="With --find: keep only candidates whose topics/recent work match REGEX "
+                         "(people named with --include are always kept)")
     lg.add_argument("--per-topic", type=int, default=8, help="Candidates per topic (default 8)")
     lg.add_argument("--workers", type=int, default=4, help="Parallel email lookups")
     lg.add_argument("--draft", action="store_true", help="Write a letter for each with an address")
@@ -2054,6 +2090,17 @@ def build_parser() -> argparse.ArgumentParser:
     ca = sub.add_parser("calendar-auth",
                         help="One-time Google Calendar sign-in for meeting holds")
     ca.set_defaults(func=cmd_calendar_auth)
+
+    pr = sub.add_parser("program-reminders",
+                        help="Email (and calendar) reminders for internship programme deadlines")
+    pr.add_argument("--dry-run", action="store_true",
+                    help="Show what would be emailed / put in the calendar; change nothing")
+    pr.add_argument("--calendar", action="store_true",
+                    help="Also create/update Google Calendar events (phone notifications)")
+    pr.add_argument("--now", metavar="YYYY-MM-DD", help="Pretend today is this date")
+    pr.add_argument("--programs", metavar="PATH",
+                    help="Programme JSON (default output/programs/internship_programs.json)")
+    pr.set_defaults(func=cmd_program_reminders)
 
     rs = sub.add_parser("resend",
                         help="Re-deliver the original email from a second account "

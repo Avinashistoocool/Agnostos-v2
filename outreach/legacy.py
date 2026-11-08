@@ -160,7 +160,15 @@ def lookup_named(disc: Discoverer, names: list[str]) -> list[Legend]:
         if not rows:
             out.append(Legend(name=name, source="you named them (not in OpenAlex)"))
             continue
-        r = max(rows, key=lambda r: r.get("cited_by_count") or 0)
+        # Search hits can be other people ("Yann LeCun" also returns Bengio):
+        # only consider records that share the surname you typed.
+        from .verify import _ascii_fold
+        surname = _ascii_fold(name.split()[-1]).lower()
+        same = [r for r in rows if surname in _ascii_fold(r.get("display_name") or "").lower()]
+        if not same:
+            out.append(Legend(name=name, source="you named them (not in OpenAlex)"))
+            continue
+        r = max(same, key=lambda r: r.get("cited_by_count") or 0)
         inst = (r.get("last_known_institutions") or [{}])[0] or {}
         out.append(Legend(
             name=r.get("display_name", name), institution=inst.get("display_name", ""),
@@ -249,9 +257,10 @@ def find_emails(legends: list[Legend], workers: int = 4) -> None:
 
 # ----------------------------------------------------------------- workbook
 def load(path: Path) -> list[dict]:
+    from .excel_io import load_workbook as safe_load
     if not path.exists():
         return []
-    ws = load_workbook(path).active
+    ws = safe_load(path).active
     hdr = [c.value for c in ws[1]]
     return [dict(zip(hdr, [c.value for c in row])) for row in ws.iter_rows(min_row=2)
             if any(c.value for c in row)]
@@ -269,7 +278,39 @@ def save(path: Path, rows: list[dict]) -> None:
         ws.column_dimensions[col].width = w
     ws.freeze_panes = "B2"
     path.parent.mkdir(parents=True, exist_ok=True)
-    wb.save(path)
+    from .excel_io import save_workbook
+    save_workbook(wb, path)
+
+
+def already_contacted(output_dir: Path) -> tuple[set[str], set[str], set[str]]:
+    """(OpenAlex IDs, lower names, emails) already mailed from professors.xlsx or send_log."""
+    import csv
+    from .excel_io import load_workbook as safe_load
+    ids, names, emails = set(), set(), set()
+    log = output_dir / "send_log.csv"
+    if log.is_file():
+        with log.open(newline="", encoding="utf-8", errors="replace") as fh:
+            for rec in csv.DictReader(fh):
+                if rec.get("status") in {"sent", "review-sent"} and rec.get("email"):
+                    emails.add(rec["email"].strip().lower())
+    profs = output_dir / "professors.xlsx"
+    if profs.is_file():
+        for ws in safe_load(profs, read_only=True).worksheets:
+            it = ws.iter_rows(values_only=True)
+            hdr = [str(h or "") for h in next(it, [])]
+            col = {h: i for i, h in enumerate(hdr)}
+            if "Send Status" not in col:
+                continue
+            for r in it:
+                if str(r[col["Send Status"]] or "").lower() != "sent":
+                    continue
+                if "OpenAlex ID" in col and r[col["OpenAlex ID"]]:
+                    ids.add(str(r[col["OpenAlex ID"]]).rsplit("/", 1)[-1].lower())
+                if "Professor Name" in col and r[col["Professor Name"]]:
+                    names.add(str(r[col["Professor Name"]]).strip().lower())
+                if "Email Address" in col and r[col["Email Address"]]:
+                    emails.add(str(r[col["Email Address"]]).strip().lower())
+    return ids, names, emails
 
 
 def merge(rows: list[dict], legends: list[Legend]) -> list[dict]:

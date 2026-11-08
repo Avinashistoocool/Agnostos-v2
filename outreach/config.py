@@ -187,6 +187,8 @@ class Settings:
     # Only draft/send professors whose work matches FOCUS_KEYWORDS (physics/HEP by default).
     focus: bool = _b("FOCUS", True)
     focus_keywords: str = os.getenv("FOCUS_KEYWORDS", "")
+    # Focus gate for approved legacy letters only (blank = FOCUS_KEYWORDS).
+    legacy_focus_keywords: str = os.getenv("LEGACY_FOCUS_KEYWORDS", "")
     verify_workers: int = _i("VERIFY_WORKERS", 4)
 
     # --- Email ---
