@@ -705,6 +705,14 @@ def cmd_resend(args) -> int:
             skipped["first email too recent"] += 1
             continue
         r["send_status"] = ""
+        if s.can_self_fund not in {"1", "true", "yes", "y", "on"}:
+            from .humanize import offers_self_funding, strip_self_funding
+            if offers_self_funding(r.get("body", "")):
+                # Older first emails offered to self-fund; resend them without that sentence.
+                r["body"] = strip_self_funding(r["body"])
+                if offers_self_funding(r["body"]) or len(r["body"]) < 200:
+                    skipped["self-funding offer could not be removed"] += 1
+                    continue
         rows.append(r)
     # Top universities first (Imperial, Oxford, ETH...), bounced first within a tier.
     ranks = {}
