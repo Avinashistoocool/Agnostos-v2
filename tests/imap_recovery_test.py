@@ -8,6 +8,9 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _isolate  # noqa: F401,E402  (must precede outreach imports)
+
 from outreach.replies import ReplyChecker
 
 

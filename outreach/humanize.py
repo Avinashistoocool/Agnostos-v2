@@ -15,7 +15,7 @@ Three stages, cheapest first:
 from __future__ import annotations
 
 import re
-
+from pathlib import Path
 # Single-word swaps with the same part of speech. Safe in any sentence position.
 WORD_SWAPS = {
     r"\butilise\b": "use",
@@ -100,13 +100,122 @@ CLAIM_SWAPS = {
     r"\bsuperior\b": "different",
 }
 
-# Claims that cannot be softened safely. These force an LLM rewrite.
+# Claims that cannot be softened safely. These force an LLM rewrite. Numbers are
+# handled separately (see `unverified_numbers`): verified ones may stay.
 HARD_CLAIM_RE = re.compile(
-    r"\b\d+(\.\d+)?\s*%"
-    r"|\b(improv|enhanc|boost)(ed|ing|es)?\s+(the\s+)?(accuracy|performance|results?|discrimination)"
+    r"\b(improv|enhanc|boost)(ed|ing|es)?\s+(the\s+)?(accuracy|performance|results?|discrimination)"
     r"|\bbeat(s|ing)?\s+(the\s+)?(baseline|state)"
     r"|\bbest[- ]in[- ]class\b"
+    r"|\b(?:outperform\w*|state[- ]of[- ]the[- ]art|sota)\b"
     r"|\bresulted in (enhanced|improved|superior|better)\b", re.I)
+
+# A metric: 84.84%, 0.9853, 10M, 4.5x, ~256 KB, 10 million. Plain integers
+# (8-10 weeks, 2027, 10 classes) are not metrics.
+METRIC_RE = re.compile(
+    r"(?<![\w.])(\d+(?:\.\d+)?)(?:\s*(%|percent\b|million\b|kb\b|mb\b|gb\b)|(x\b|\u00d7|m\b|k\b))"
+    r"|(?<![\w.\-])(\d+\.\d+)(?![\w.]*\.\w)", re.I)
+
+# Fallback when output/confirmed_facts.md is absent: the user-verified numbers.
+DEFAULT_CONFIRMED_FACTS = """
+GDS-ParT: 84.84% accuracy and 0.9853 macro AUC on 1M JetClass test jets (10 classes).
+Trained 2.07M parameters on 10M jets on a single 6 GB GPU; cache cut from ~256 KB to ~1.9 KB.
+GDS-ParT-MoE: NMI 0.45/0.43; one expert showed 4.5x muon enrichment.
+NIDAR: 100% simulated coverage. AnaTele: 20 rules.
+"""
+
+_UNIT_ALIASES = {"percent": "%", "\u00d7": "x", "million": "m"}
+
+
+def _metric_key(value: str, unit: str) -> tuple[str, str]:
+    unit = (unit or "").lower()
+    return value, _UNIT_ALIASES.get(unit, unit)
+
+
+def metric_tokens(text: str) -> list[tuple[str, tuple[str, str]]]:
+    """(matched text, (value, unit)) for every metric-looking number."""
+    out = []
+    for m in METRIC_RE.finditer(text or ""):
+        if m.group(1):
+            out.append((m.group(0), _metric_key(m.group(1), m.group(2) or m.group(3))))
+        else:
+            out.append((m.group(0), _metric_key(m.group(4), "")))
+    return out
+
+
+def allowed_metrics(facts_text: str) -> set[tuple[str, str]]:
+    return {key for _, key in metric_tokens(facts_text)}
+
+
+_FACTS_CACHE: dict[str, str] = {}
+
+
+def confirmed_facts_text(path: str | Path | None = None) -> str:
+    """The user-verified facts block (output/confirmed_facts.md), comments stripped."""
+    if path is None:
+        try:
+            from .config import settings
+            path = settings.confirmed_facts_file or (Path(settings.output_dir) / "confirmed_facts.md")
+        except Exception:
+            path = ""
+    key = str(path or "")
+    if key not in _FACTS_CACHE:
+        text = ""
+        if key and Path(key).is_file():
+            lines = Path(key).read_text(encoding="utf-8").splitlines()
+            text = "\n".join(l for l in lines if not l.lstrip().startswith("# ")).strip()
+        _FACTS_CACHE[key] = text or DEFAULT_CONFIRMED_FACTS.strip()
+    return _FACTS_CACHE[key]
+
+
+def default_allowed() -> set[tuple[str, str]]:
+    return allowed_metrics(confirmed_facts_text())
+
+
+def unverified_numbers(text: str, allowed: set | None = None) -> list[str]:
+    allowed = default_allowed() if allowed is None else allowed
+    return [raw.strip() for raw, key in metric_tokens(text) if key not in allowed]
+
+
+_REPO_RE = re.compile(r"(?:https?://)?(?:www\.)?github\.com/([\w.\-]+)(/[\w.\-]+)?/?", re.I)
+
+
+def allowed_links(facts_text: str) -> set[str]:
+    return {m.group(0).lower().rstrip("/.").removeprefix("https://").removeprefix("http://")
+            .removeprefix("www.") for m in _REPO_RE.finditer(facts_text or "")}
+
+
+def fix_unverified_links(text: str, allowed: set[str] | None = None) -> tuple[str, list[str]]:
+    """Replace GitHub repo links that are not in the confirmed facts with the profile link."""
+    allowed = allowed_links(confirmed_facts_text()) if allowed is None else allowed
+    fixed = []
+
+    def _sub(m):
+        key = m.group(0).lower().rstrip("/.").removeprefix("https://").removeprefix("http://") \
+            .removeprefix("www.")
+        if key in allowed or not m.group(2):
+            return m.group(0)
+        fixed.append(m.group(0))
+        return f"github.com/{m.group(1)}" + ("." if m.group(0).endswith(".") else "")
+
+    return _REPO_RE.sub(_sub, text or ""), fixed
+
+
+def strip_unverified_numbers(text: str, allowed: set | None = None) -> tuple[str, list[str]]:
+    """Drop every sentence quoting a number outside the confirmed facts."""
+    allowed = default_allowed() if allowed is None else allowed
+    removed = []
+    paras = []
+    for para in (text or "").split("\n"):
+        kept = []
+        for s in re.split(r"(?<=[.!?])\s+(?=[A-Z])", para):
+            bad = unverified_numbers(s, allowed)
+            if bad:
+                removed.extend(bad)
+                continue
+            kept.append(s)
+        paras.append(" ".join(kept))
+    out = re.sub(r"\n{3,}", "\n\n", "\n".join(paras)).strip()
+    return out, removed
 
 AI_TELLS = [
     (r"\u2014", 3, "em dash"),
@@ -137,7 +246,21 @@ def _break_triads(text: str) -> str:
         lambda m: f"{m.group(1)} and {m.group(3)}", text, count=1)
 
 
+_URL_RE = re.compile(
+    r"https?://\S+|www\.\S+|\S+@[\w\-]+(?:\.[\w\-]+)+"
+    r"|\b[\w\-]+(?:\.[\w\-]+)*\.(?:com|org|io|net|edu|in|de|ch|uk|eu)(?:/[^\s,;)]*)?",
+    re.I)
+
+
 def _tidy_spacing(text: str) -> str:
+    # Links and addresses must survive the punctuation-spacing rules below.
+    links = []
+
+    def _mask(m):
+        links.append(m.group(0))
+        return f"\x00{len(links) - 1}\x00"
+
+    text = _URL_RE.sub(_mask, text)
     text = text.replace("\u2014", ", ").replace("\u2013", "-")
     text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
     text = re.sub(r"(?m)^\s*[-*\u2022]\s+", "", text)
@@ -147,6 +270,7 @@ def _tidy_spacing(text: str) -> str:
     text = re.sub(r"\n{3,}", "\n\n", text)
     text = re.sub(r"(?m)^(.)", lambda m: m.group(1).upper(), text)
     text = re.sub(r"([.!?]\s+)([a-z])", lambda m: m.group(1) + m.group(2).upper(), text)
+    text = re.sub(r"\x00(\d+)\x00", lambda m: links[int(m.group(1))], text)
     return text.strip()
 
 
@@ -155,16 +279,29 @@ _SELF_FUND_RE = re.compile(
     r"ready to|i'?ll|i'?d)\b[^.!?\n]{0,40}"
     r"\b(?:cover|pay|fund|finance|self-fund|support)\b[^.!?\n]{0,50}"
     r"\b(?:travel|visa|living|accommodation|expenses|costs|stay|own|myself)\b)"
-    r"|\bbe self-?funded\b|\bself-?fund(?:ing|ed)?\b|\bmy own (?:funding|expenses|costs)\b",
+    r"|\bbe self-?funded\b|\bself-?fund(?:ing|ed)?\b|\bmy own (?:funding|expenses|costs)\b"
+    r"|\bunpaid\b|\bwithout (?:pay|payment|a stipend|a salary|funding)\b"
+    r"|\bcontribut\w*\s+(?:to|towards?)\s+(?:the\s+|my\s+|any\s+)?(?:costs?|expenses|travel)",
     re.I)
+# Offers phrased with a negation ("no stipend needed") are still offers.
+_NEGATED_OFFER_RE = re.compile(
+    r"\bno\s+(?:stipend|salary|payment|pay|funding)\s+(?:is\s+)?(?:needed|required|necessary)\b"
+    r"|\b(?:don'?t|do not|won'?t|will not)\s+(?:need|require|expect)\s+"
+    r"(?:a\s+|any\s+)?(?:stipend|salary|payment|funding|to be paid)\b", re.I)
 _NEGATED_RE = re.compile(r"\b(?:not|n't|unable|cannot|can't|won't|no)\b", re.I)
+
+
+def _is_offer(sentence: str) -> bool:
+    if _NEGATED_OFFER_RE.search(sentence):
+        return True
+    return bool(_SELF_FUND_RE.search(sentence)) and not _NEGATED_RE.search(sentence)
 
 
 def offers_self_funding(text: str) -> list[str]:
     """Sentences that offer to pay one's own way (negated statements are fine)."""
     hits = []
     for s in re.split(r"(?<=[.!?])\s+|\n+", text or ""):
-        if _SELF_FUND_RE.search(s) and not _NEGATED_RE.search(s):
+        if _is_offer(s):
             hits.append(s.strip())
     return hits
 
@@ -176,7 +313,7 @@ def strip_self_funding(text: str) -> str:
         sents = re.split(r"(?<=[.!?])\s+", para)
         kept = []
         for s in sents:
-            if not _SELF_FUND_RE.search(s) or _NEGATED_RE.search(s):
+            if not _is_offer(s):
                 kept.append(s)
                 continue
             # "I'm available May-July for 8-12 weeks and can cover travel..." -> keep availability.
@@ -225,20 +362,68 @@ def score(text: str) -> tuple[int, list[str]]:
 
 
 def has_hard_claims(text: str) -> bool:
-    return bool(HARD_CLAIM_RE.search(text or ""))
+    return bool(HARD_CLAIM_RE.search(text or "")) or bool(unverified_numbers(text or ""))
+
+
+# --- first-email validation -------------------------------------------------
+MONEY_RE = re.compile(
+    r"\b(?:fund(?:s|ed|ing)?|stipend\w*|salar(?:y|ies)|paid|unpaid|payment|"
+    r"costs?(?!\s*(?:map|function|field|matrix|term|surface))|expenses?|money|financ\w*|"
+    r"scholarships?|grants?|travel (?:support|grant)|self-?fund\w*|afford\w*)\b", re.I)
+FIRST_EMAIL_BANNED = [
+    (re.compile(r"\bcapacity\b", re.I), "says 'capacity'"),
+    (re.compile(r"\btrouble following\b|\bgot stuck\b|\bdidn.?t (?:fully |quite )?follow\b|"
+                r"\bwrap my head\b", re.I), "opens with confusion ('trouble following')"),
+    (re.compile(r"\bsmall subset\b", re.I), "says 'small subset'"),
+    (re.compile(r"\bGPA\b|\bCGPA\b", re.I), "mentions GPA"),
+    (re.compile(r"\bmay I send\b[^.?!]{0,30}\b(?:cv|resume|r\u00e9sum\u00e9)\b", re.I),
+     "asks 'May I send my CV' (link it instead)"),
+]
+SUBJECT_BANNED = re.compile(r"\b(?:inquiry|enquiry)\b", re.I)
+_GREETING_LINE_RE = re.compile(
+    r"^\s*(?:dear\b|hello\b|hi\b|good (?:morning|afternoon)\b|sehr geehrte|"
+    r"(?:prof\.?|professor|dr\.?)\s+[^\s,]+(?:\s+[^\s,]+)?\s*,\s*$)", re.I)
+
+
+def validate_first_email(subject: str, body: str, allow_money: bool = False,
+                         allowed: set | None = None) -> list[str]:
+    """Reasons this cold first email must not go out as drafted ([] = fine)."""
+    problems = []
+    body = body or ""
+    for rx, label in FIRST_EMAIL_BANNED:
+        if rx.search(body):
+            problems.append(label)
+    lines = [l for l in body.splitlines() if l.strip()]
+    greetings = [l for l in lines[:4] if _GREETING_LINE_RE.match(l)]
+    if len(greetings) >= 2:
+        problems.append("two greeting lines")
+    if SUBJECT_BANNED.search(subject or ""):
+        problems.append("'inquiry/enquiry' in subject")
+    if not allow_money:
+        hit = MONEY_RE.search(body)
+        if hit:
+            problems.append(f"mentions money/funding ('{hit.group(0)}')")
+    if offers_self_funding(body):
+        problems.append("offers self-funding")
+    bad = unverified_numbers(body, allowed)
+    if bad:
+        problems.append("unverified number(s): " + ", ".join(bad[:3]))
+    return problems
 
 
 REWRITE_SYSTEM = """You rewrite cold emails so they read as if a real second-year undergraduate typed them.
 
 Rules:
-- Keep every fact, name, date and the overall structure. Change only the voice.
-- Shorten. Vary sentence length sharply: follow a long sentence with a very short one.
+- Keep every fact, name, date, link and the overall structure. Change only the voice.
+- Keep the verified numbers EXACTLY as written (84.84%, 0.9853 macro AUC, 1M test jets, 10M training jets, 2.07M parameters, and any other number from the confirmed facts). Do not round, drop or add numbers.
+- Remove any OTHER metric, and any claim of novelty or superiority ("outperformed", "state of the art", "beat").
+- Never add "small subset", "mostly", "basic", "just to see", "capacity", "trouble following", or anything about money, funding, costs or GPA.
+- Shorten. Vary sentence length: follow a long sentence with a short one.
 - Use contractions (I'm, I've, it's). Use plain words.
-- Remove any claim of results, metrics, novelty or superiority. The student's projects are coursework; they built and tried things, they did not achieve or prove anything. If a sentence claims a result, rewrite it as what they attempted or wanted to understand.
 - Never use: delve, leverage, utilise, robust, cutting-edge, seamless, pivotal, invaluable, passionate, thrilled, align with, resonate, moreover, furthermore, therefore, showcase, underscore, "I am writing to", "I hope this email finds you well".
 - No em dashes, no markdown, no bullet points, no three-item lists.
-- Keep the salutation line and the sign-off exactly as they are.
-- Stay between 120 and 180 words.
+- Keep the single salutation line and the sign-off exactly as they are. Never add a second greeting.
+- Stay between 110 and 150 words, in 4 short paragraphs.
 
 Return ONLY the rewritten email body as plain text. No JSON, no commentary, no quotes around it."""
 

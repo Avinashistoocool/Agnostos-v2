@@ -111,6 +111,10 @@ def _require_file(value, env_key: str, what: str) -> Path:
         raise ConfigError(f"{env_key} must point at a file, not a folder: {path}")
     return path
 
+# Hard ceiling for cold first emails per day per account, applied in code even
+# if DAILY_SEND_CAP / RESEND_DAILY_CAP in .env are higher. Replies are not cold.
+COLD_DAILY_HARD_CAP = 40
+
 # OpenAI only caches prompt prefixes at or above this length, and does so
 # automatically. Below it, every input token is billed at the full rate.
 CACHE_MIN_PREFIX_TOKENS = 1024
@@ -206,8 +210,24 @@ class Settings:
     reply_to: str = os.getenv("REPLY_TO", "")
     send_delay_min: float = _f("SEND_DELAY_MIN", 90)
     send_delay_max: float = _f("SEND_DELAY_MAX", 240)
+    # Cold first emails (send/resend/legacy) are additionally clamped at
+    # COLD_DAILY_HARD_CAP in code, whatever this says (see diag-deliverability).
     daily_send_cap: int = _i("DAILY_SEND_CAP", 25)
-    send_min_probability: int = _i("SEND_MIN_PROBABILITY", 0)
+    send_min_probability: int = _i("SEND_MIN_PROBABILITY", 40)
+    # Floor applied to cold sends even when SEND_MIN_PROBABILITY is lower
+    # (an explicit `send --min-probability N` overrides both).
+    cold_min_probability: int = _i("COLD_MIN_PROBABILITY", 40)
+    # Cold first emails link the CV (CV_URL) instead of attaching it.
+    cold_attach_cv: bool = _b("COLD_ATTACH_CV", False)
+    cv_url: str = os.getenv("CV_URL", "https://avinashistoocool.github.io/").strip()
+    # At most this many cold first emails per institution domain per rolling 7 days.
+    max_per_domain_week: int = _i("MAX_PER_DOMAIN_WEEK", 3)
+    # Cold sends need first initial + surname in the address, not the surname alone.
+    name_match_strict: bool = _b("NAME_MATCH_STRICT", True)
+    # Groups/people that said they never host ad-hoc interns (blank = output/no_cold_email.json).
+    no_cold_email_file: str = os.getenv("NO_COLD_EMAIL_FILE", "").strip()
+    # Verified facts the drafting prompt may quote (blank = output/confirmed_facts.md).
+    confirmed_facts_file: str = os.getenv("CONFIRMED_FACTS_FILE", "").strip()
     # Recipient-local hours to send in, e.g. "9-11". Blank = any time.
     send_local_window: str = os.getenv("SEND_LOCAL_WINDOW", "")
 

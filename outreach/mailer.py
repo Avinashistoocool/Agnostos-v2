@@ -15,7 +15,7 @@ from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid
 from pathlib import Path
 
-from .config import Settings
+from .config import COLD_DAILY_HARD_CAP, Settings
 from .google_oauth import load_token_file, smtp_authenticate, uses_xoauth2
 from .resume_parser import ResumeProfile
 from .schedule import fmt_duration as _fmt
@@ -129,9 +129,14 @@ class Mailer:
         self.close()
 
     def build_reply(self, to_email: str, to_name: str, subject: str, body: str,
-                    in_reply_to: str = "", references: str = "") -> EmailMessage:
+                    in_reply_to: str = "", references: str = "",
+                    attachments: list[str] | None = None) -> EmailMessage:
         """A threaded follow-up: Re: subject, In-Reply-To/References. ATTACHMENTS
-        (your CV) are added only when the body says something is attached."""
+        (your CV) are added only when the body says something is attached.
+        `attachments` (a queue item's own list) replaces ATTACHMENTS and is always
+        attached; an empty list means the reply must not promise an attachment."""
+        if isinstance(attachments, str):
+            attachments = [attachments]
         # IMAP headers may arrive folded across lines; header values can't contain CR/LF.
         subject, in_reply_to, references, to_name = (
             " ".join(str(v or "").split()) for v in (subject, in_reply_to, references, to_name))
@@ -160,9 +165,11 @@ class Mailer:
         if self.s.reply_to:
             msg["Reply-To"] = self.s.reply_to
         msg.set_content(body.rstrip() + "\n" + self.signature)
-        if mentions_attachment(body):
+        if attachments:
+            self._attach_files(msg, list(attachments))
+        elif mentions_attachment(body):
             # The draft promises an attachment, so it must actually be there.
-            if not self._attach_files(msg):
+            if attachments is not None or not self._attach_files(msg):
                 raise ValueError("reply says something is attached but no ATTACHMENTS "
                                  "file exists; fix ATTACHMENTS in .env or edit the body")
         return msg
@@ -214,8 +221,12 @@ class Mailer:
 
     # ---------- message ----------
     def build_message(self, to_email: str, to_name: str, subject: str,
-                      body: str, attachments: list[str] | None = None) -> EmailMessage:
-        """`attachments` replaces the global ATTACHMENTS for this one message."""
+                      body: str, attachments: list[str] | None = None,
+                      cv_link: bool = True) -> EmailMessage:
+        """A cold first email. `attachments` (e.g. a legacy row's "Attachment"
+        cell) is attached as given. Without it, ATTACHMENTS (the CV) is attached
+        only when COLD_ATTACH_CV=true; otherwise the CV is linked via CV_URL
+        in the signature (unless the body already links it, or cv_link=False)."""
         msg = EmailMessage()
         from_name = self.s.smtp_from_name or (self.profile.name if self.profile else "")
         msg["From"] = formataddr((from_name, self.s.smtp_from)) if from_name else self.s.smtp_from
@@ -226,9 +237,19 @@ class Mailer:
             domain=self.s.smtp_from.rpartition("@")[2] or None)
         if self.s.reply_to:
             msg["Reply-To"] = self.s.reply_to
-        full_body = body.rstrip() + "\n" + self.signature
+        attach_global = attachments is None and getattr(self.s, "cold_attach_cv", False)
+        signature = self.signature
+        cv_url = str(getattr(self.s, "cv_url", "") or "").strip()
+        if cv_link and cv_url and not attachments and not attach_global and self.signature:
+            bare = re.sub(r"^https?://", "", cv_url).rstrip("/").lower()
+            if bare not in body.lower():
+                signature = signature.rstrip() + f"\nCV: {cv_url}"
+        full_body = body.rstrip() + "\n" + signature
         msg.set_content(full_body)
-        self._attach_files(msg, attachments)
+        if attachments is not None:
+            self._attach_files(msg, attachments)
+        elif attach_global:
+            self._attach_files(msg)
         return msg
 
     # ---------- sending ----------
@@ -290,11 +311,16 @@ class Mailer:
                    resend: bool = False, top: int | None = None,
                    allow_unverified: bool = False, window=None,
                    wait_for_window: bool = False, on_update=None,
-                   initial_sent_by_date: dict[str, int] | None = None) -> list[dict]:
+                   initial_sent_by_date: dict[str, int] | None = None,
+                   guard=None) -> list[dict]:
         """Send pending rows. With `window` (a schedule.SendWindow), a row only
         goes out inside the recipient's local hours; rows outside it are left
-        untouched, or waited for when `wait_for_window` is set."""
+        untouched, or waited for when `wait_for_window` is set. With `guard`
+        (a send_guard.ColdGuard), blocked recipients are skipped with a reason
+        and the per-domain weekly cap is enforced. These are cold first emails,
+        so the daily cap is clamped at COLD_DAILY_HARD_CAP whatever .env says."""
         updates = []
+        daily_cap = min(self.s.daily_send_cap, COLD_DAILY_HARD_CAP)
         # A dry run must never block a later real send, and neither may a
         # review copy sent to yourself: only real deliveries count when live.
         done = {"sent", "review-sent"} if self.redirect_to else {"sent"}
@@ -303,6 +329,19 @@ class Mailer:
             if (resend or r.get("send_status", "").lower() not in done)
             and r.get("probability", 0) >= self.s.send_min_probability
         ]
+        if guard is not None:
+            kept = []
+            for r in pending:
+                why = guard.permanent_reason(r, allow_unverified=allow_unverified)
+                if not why:
+                    kept.append(r)
+                    continue
+                skip = {"sheet": r["sheet"], "row": r["row"], "status": why,
+                        "detail": "", "sent_at": ""}
+                updates.append(skip)
+                if progress:
+                    progress(0, 0, r, {"status": why, "detail": "", "message": None})
+            pending = kept
         if top:
             # Mail the N strongest matches, not the first N in sheet order.
             pending = sorted(pending, key=lambda r: -r.get("probability", 0))[:top]
@@ -314,11 +353,11 @@ class Mailer:
             if self.dry_run:
                 return False
             if initial_sent_by_date is None:
-                return self.sent_count >= self.s.daily_send_cap
+                return self.sent_count >= daily_cap
             today = datetime.now().strftime("%Y-%m-%d")
             sent_now = sum(1 for u in updates if u["status"] == "sent"
                            and u.get("sent_at", "").startswith(today))
-            return initial_sent_by_date.get(today, 0) + sent_now >= self.s.daily_send_cap
+            return initial_sent_by_date.get(today, 0) + sent_now >= daily_cap
 
         while queue:
             if cap_reached():
@@ -358,7 +397,16 @@ class Mailer:
                 if progress:
                     progress(i, total, row, result)
                 continue
+            why = guard.domain_reason(row) if guard is not None else ""
+            if why:
+                updates.append({"sheet": row["sheet"], "row": row["row"], "status": why,
+                                "detail": "", "sent_at": ""})
+                if progress:
+                    progress(i, total, row, {"status": why, "detail": "", "message": None})
+                continue
             result = self.send_one(row)
+            if guard is not None and result["status"] in {"sent", "dry-run"}:
+                guard.record(row)
             update = {
                 "sheet": row["sheet"], "row": row["row"],
                 "status": result["status"],

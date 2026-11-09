@@ -19,12 +19,16 @@ import re
 import time
 from dataclasses import dataclass
 
+from pathlib import Path
+
 from .config import CACHE_MIN_PREFIX_TOKENS, Settings
 
 # gpt-5 / o-series replies include hidden reasoning tokens (~1-2k here).
 REASONING_MIN_TOKENS = 4000
 MAX_TOKEN_BUDGET = 16000
 from .humanize import REWRITE_SYSTEM, build_rewrite_request, deslop, has_hard_claims
+from .humanize import (allowed_links, allowed_metrics, confirmed_facts_text,
+                       fix_unverified_links, strip_unverified_numbers, validate_first_email)
 from .humanize import score as ai_score
 from .models import Professor
 from .resume_parser import ResumeProfile
@@ -32,11 +36,11 @@ from .tls import http_client
 
 SYSTEM_TEMPLATE = """You are an expert academic outreach strategist advising a student seeking a {position} in {geography}.
 
-APPLICANT PROFILE
+APPLICANT PROFILE (background only; quote facts and numbers only from CONFIRMED FACTS below)
 {profile}
 
 Availability: {availability}
-Funding: {funding}
+Funding (context for scoring only; NEVER mention money in a first email): {funding}
 For each professor given, do two things:
 
 1. SCORE the realistic probability (1-100) that this professor would accept this student for a {position}. Calibrate honestly and use the full range:
@@ -48,37 +52,37 @@ For each professor given, do two things:
    Penalize: generic topic overlap, no funding route, very senior/large groups, missed deadlines.
    Reward: specific technical overlap with the student's actual projects, named funding programmes, explicit eligibility for non-EU undergraduates.
 
-2. DRAFT a cold outreach email to that professor.
+2. DRAFT a cold FIRST email to that professor.
+
+CONFIRMED FACTS (user-verified; the only facts and numbers you may state about the student)
+{confirmed_facts}
 
 HONESTY AND FRAMING — THIS MATTERS MOST
-The student is a second-year undergraduate. Their projects are coursework-scale and self-directed, NOT peer-reviewed results. Write accordingly:
-- Describe what they BUILT and TRIED, never what they "achieved", "improved", "outperformed", or "demonstrated".
-- Never cite metrics, accuracy figures, benchmark wins, or claims of novelty. Do not say a method "resulted in enhanced discrimination" or similar.
-- Acceptable framing: "I built", "I implemented", "I was trying to see whether", "I spent the summer working on", "I got it running on".
-- Explicitly allowed and encouraged: admitting limits. "on a small subset", "mostly to understand the architecture", "I am still working out why".
-- Position the student as someone who wants to LEARN from this group, not as someone arriving with results. The ask is to be taught, not to be credited.
+The student is a second-year undergraduate. Be exactly as strong as the confirmed facts, no stronger and no weaker:
+- Numbers: you may quote numbers from CONFIRMED FACTS verbatim. Never invent, round or alter a number, and never quote any other number (no GPA, no ranks, no percentages that are not listed).
+- Lead with the confirmed result most relevant to THIS professor's field. For particle physics, HEP, ML or physics targets that is GDS-ParT: 84.84% accuracy / 0.9853 macro AUC on 1M JetClass test jets, built in Prof. Abhishek Iyer's HEP group at IIT Delhi (Letter of Commendation). For robotics/swarms/planning use NIDAR; for drones/flight software/reliability use AnaTele; for vision use the CV tracking or medial-axis work. Use only facts relevant to their field; one project, not a list.
+- Never compare against other models, never claim novelty, never say "outperformed", "state of the art" or "beat".
+- Never describe the work as "a small subset", "basic", "mostly to understand", "just to see", and never say you had trouble following, got stuck on or didn't follow their work.
 - Nothing in the email should embarrass the student if the professor asked them to defend it in a five-minute conversation.
 
 VOICE — WRITE LIKE A PERSON, NOT A LANGUAGE MODEL
-- Vary sentence length. Mix a long sentence with a short one. Some sentences can be six words.
-- Use plain words: "used" not "utilised", "so" not "thus", "about" not "regarding", "I think" not "I believe it is evident that".
-- Contractions are fine and good: I'm, I've, it's, don't.
-- BANNED phrases: "I am writing to", "I am reaching out", "delve", "leverage", "utilise", "robust", "cutting-edge", "passionate about", "align with", "resonates", "moreover", "furthermore", "in conclusion", "I would be thrilled", "invaluable", "testament to", "deep dive", "landscape", "realm", "pivotal", "underscore", "showcase", "seamless", "comprehensive", "it is worth noting".
-- No three-item lists ("X, Y, and Z"). That rhythm is the clearest LLM tell.
-- Do not restate the professor's work back to them as a compliment. One specific sentence showing you actually read something is enough.
-- Slight informality beats polish. A real student writes a little unevenly.
+- Vary sentence length. Mix a long sentence with a short one.
+- Use plain words: "used" not "utilised", "so" not "thus", "about" not "regarding".
+- Contractions are fine: I'm, I've, it's, don't.
+- BANNED phrases: "I am writing to", "I am reaching out", "delve", "leverage", "utilise", "robust", "cutting-edge", "passionate about", "align with", "resonates", "moreover", "furthermore", "in conclusion", "I would be thrilled", "invaluable", "testament to", "deep dive", "landscape", "realm", "pivotal", "underscore", "showcase", "seamless", "comprehensive", "it is worth noting", "I read your", "caught my eye", "wrap my head around", "get a feel for", "Thanks for reading", "mostly".
+- No three-item lists ("X, Y, and Z").
+- Do not restate the professor's work back to them as a compliment.
 
 EMAIL RULES
-- 130-180 words in the body. Shorter is better than padded.
-- Begin with a salutation line addressing the professor by title and surname, followed by a blank line.
-- Write 3 or 4 short paragraphs separated by blank lines. Never one solid block.
-- Open by naming one specific thing from the professor's OWN recent work (use the supplied publications/topics; never invent a title). Say plainly what caught your interest or what you did not follow.
-- Connect it to ONE thing the student actually built, described modestly, with a concrete technical detail.
-- State availability and duration. On money, follow the Funding line above EXACTLY: never offer, imply or hint that the student will pay for travel, visa, accommodation or living costs unless it says they can. If a funding route is supplied, name it; otherwise do not mention money at all in a first email.
-- One clear ask: whether they have capacity to take a summer student, and whether you may send more detail.
+- 110-150 words in the body, in exactly 4 short paragraphs separated by blank lines, after ONE salutation line ("Dear Prof. <Surname>,"; "Dr." if the context says they are not a professor). Never write a second greeting line.
+- Paragraph 1 (who + proof, 1-2 sentences): "I'm a second-year Engineering Physics student at IIT Delhi." plus the single strongest confirmed result for their field, with its code link.
+- Paragraph 2 (why them, 1-2 sentences): name ONE supplied publication, method or topic of theirs (never invent a title) and say in ONE sentence how the student's work connects to it, as something the student wants to work on. A statement, not a confession of confusion.
+- Paragraph 3 (the ask, one sentence, the only question mark in the email): "Could I spend 8-10 weeks in summer 2027 working on <a specific thing in their group>?" then the fallback "If that isn't possible, could you point me to someone who might be a good fit?" may follow as a clause or short sentence.
+- Paragraph 4: "My CV is linked here: {cv_url}" then a short sign-off with the first name only; the signature block is appended automatically.
+- NEVER use the words "capacity", "space for", "room for" or "any chance". Never ask "May I send my CV" and never say the CV is attached.
+- MONEY: a first email never mentions funding, stipends, salary, payment, costs, travel, visa, unpaid work or self-funding. Not even to say the student needs funding. Funding is discussed only after the professor replies.
 - Plain text, no markdown, no em dashes, no bullet points. British/neutral English.
-- End with a short sign-off and the student's first name only; the signature block is appended automatically.
-- Subject line: under 70 characters, lowercase-ish and specific, like a human typed it. No "Application", no colons-with-grand-titles.
+- Subject: "<their topic> / <student's matching result> (IIT Delhi)", under 70 characters, e.g. "Belle II GNN background sim / 84.84% JetClass ParT tagger (IIT Delhi)". Never use "inquiry", "enquiry", "internship", "opportunity" or "Application".
 
 OUTPUT
 Return a JSON object with exactly these fields: probability, justification, subject, body.
@@ -103,8 +107,8 @@ RESPONSE_SCHEMA = {
         },
         "body": {
             "type": "string",
-            "description": ("Email body, 150-200 words. Plain text starting with a "
-                            "salutation line, then 3-4 short paragraphs separated by "
+            "description": ("Email body, 110-150 words. Plain text starting with ONE "
+                            "salutation line, then 4 short paragraphs separated by "
                             "blank lines, then a sign-off. Use \\n for line breaks."),
         },
     },
@@ -114,8 +118,20 @@ USER_TEMPLATE = """Evaluate and draft for this professor.
 
 {context}"""
 
+REDRAFT_NOTE = """
+
+Your previous draft was REJECTED for: {problems}.
+Previous subject: {subject}
+Previous body:
+{body}
+
+Write a new draft that follows every EMAIL RULE and fixes each problem above."""
+
 
 GREETING_RE = re.compile(r"^(dear|hello|hi|good (morning|afternoon)|sehr geehrte)", re.I)
+SECOND_GREETING_RE = re.compile(
+    r"^\s*(?:(?:dear|hello|hi|good (?:morning|afternoon)|sehr geehrte)\b[^\n]{0,60}"
+    r"|(?:prof\.?|professor|dr\.?)\s+[^\s,]+(?:\s+[^\s,]+)?\s*[,:!])\s*$", re.I)
 TITLE_PREFIX_RE = re.compile(r"^(Prof\.?|Professor|Dr\.?|PD|Mr\.?|Ms\.?|Mrs\.?)\s+", re.I)
 
 
@@ -151,6 +167,13 @@ def tidy_body(body: str, professor_name: str) -> str:
         text = text.strip()
     else:
         greeting = _salutation(professor_name)
+    # Models sometimes add their own salutation under the one above.
+    while True:
+        first, _, rest = text.partition("\n")
+        if first and SECOND_GREETING_RE.match(first) and rest.strip():
+            text = rest.strip()
+        else:
+            break
 
     # Peel off a trailing sign-off so it is never merged into a paragraph.
     signoff = ""
@@ -221,10 +244,20 @@ class LLMEvaluator:
         self.system_prompt = SYSTEM_TEMPLATE.format(
             position=settings.position,
             geography=settings.geography,
-            profile=profile.summary_block(),
+            profile=re.sub(r",?\s*GPA[^),\n]*", "", profile.summary_block()),
             availability=settings.availability,
             funding=settings.funding_stance,
+            confirmed_facts=confirmed_facts_text(
+                getattr(settings, "confirmed_facts_file", "")
+                or Path(settings.output_dir) / "confirmed_facts.md"),
+            cv_url=getattr(settings, "cv_url", "") or "https://avinashistoocool.github.io/",
         )
+        self.allowed_numbers = allowed_metrics(confirmed_facts_text(
+            getattr(settings, "confirmed_facts_file", "")
+            or Path(settings.output_dir) / "confirmed_facts.md"))
+        self.allowed_links = allowed_links(confirmed_facts_text(
+            getattr(settings, "confirmed_facts_file", "")
+            or Path(settings.output_dir) / "confirmed_facts.md"))
         self.usage = {"input": 0, "output": 0, "cached": 0, "calls": 0, "rewrites": 0}
         # Capabilities are optimistic, then downgraded on the first rejection.
         self.caps = {
@@ -366,7 +399,8 @@ class LLMEvaluator:
     def evaluate_one(self, prof: Professor, model: str | None = None,
                      max_retries: int = 3) -> Professor:
         model = model or self.settings.draft_model
-        message = USER_TEMPLATE.format(context=prof.context_block())
+        message = base_message = USER_TEMPLATE.format(context=prof.context_block())
+        redrafted = False
 
         last_error = ""
         attempt = 0
@@ -403,7 +437,18 @@ class LLMEvaluator:
                 prof.email_subject = str(data.get("subject", "")).strip()
                 prof.email_body = tidy_body(str(data.get("body", "")), prof.name)
                 self._humanize(prof, model)
-                prof.llm_status = f"ok ({model})"
+                problems = self.validate(prof)
+                if problems and not redrafted:
+                    # One redraft with the reasons; a second failure is flagged instead.
+                    redrafted = True
+                    message = base_message + REDRAFT_NOTE.format(
+                        problems="; ".join(problems), subject=prof.email_subject,
+                        body=prof.email_body)
+                    continue
+                if problems:
+                    prof.ai_flags = ("REJECTED DRAFT: " + "; ".join(problems) + " | "
+                                     + prof.ai_flags).strip(" |")
+                prof.llm_status = f"ok ({model})" + (" +redraft" if redrafted else "")
                 return prof
             except Exception as exc:
                 last_error = f"{type(exc).__name__}: {exc}"
@@ -446,12 +491,28 @@ class LLMEvaluator:
             if offers_self_funding(body):
                 body = strip_self_funding(body)
                 reasons = list(reasons) + ["removed self-funding offer"]
+        # Only numbers from the confirmed facts may stay.
+        body, removed = strip_unverified_numbers(body, self.allowed_numbers)
+        if removed:
+            reasons = list(reasons) + ["removed unverified number(s): " + ", ".join(removed[:3])]
+        body, bad_links = fix_unverified_links(body, self.allowed_links)
+        if bad_links:
+            reasons = list(reasons) + ["replaced unverified link(s): " + ", ".join(bad_links[:2])]
+        body = re.sub(r"(?m)^(My CV is linked here:[^\n]*)\n(?=\S)", r"\1\n\n", body)
         prof.email_body = body
         prof.ai_score = penalty
         prof.ai_flags = "; ".join(reasons)
         if has_hard_claims(body):
             prof.ai_flags = ("UNVERIFIED CLAIM - review before sending; "
                              + prof.ai_flags).strip("; ")
+
+    def validate(self, prof: Professor) -> list[str]:
+        """Rules a cold first email must pass (see humanize.validate_first_email)."""
+        problems = validate_first_email(prof.email_subject, prof.email_body,
+                                        allowed=self.allowed_numbers)
+        if len(prof.email_subject or "") > 70:
+            problems.append("subject over 70 characters")
+        return problems
 
     def _rewrite(self, body: str, model: str) -> str:
         kwargs = {

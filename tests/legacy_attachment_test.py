@@ -9,6 +9,9 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _isolate  # noqa: F401,E402  (must precede outreach imports)
+
 from outreach import legacy as L
 from outreach.config import settings
 from outreach.mailer import Mailer
@@ -43,8 +46,15 @@ class LegacyAttachmentTests(unittest.TestCase):
                          ["a.pdf", "b c.pdf"])
         self.assertIn("Attachment", L.COLUMNS)
 
-    def test_blank_cell_keeps_global_attachments(self):
-        m = Mailer(self.s, dry_run=True)
+    def test_blank_cell_sends_no_attachment_by_default(self):
+        # Cold first emails link the CV instead of attaching it (COLD_ATTACH_CV=false).
+        m = Mailer(replace(self.s, cold_attach_cv=False), dry_run=True)
+        msg = m.build_message("x@cern.ch", "X", "Hi", "Dear Dr. X,",
+                              attachments=L.row_attachments({"Attachment": ""}))
+        self.assertEqual(self.names(msg), [])
+
+    def test_blank_cell_uses_global_attachments_when_opted_in(self):
+        m = Mailer(replace(self.s, cold_attach_cv=True), dry_run=True)
         msg = m.build_message("x@cern.ch", "X", "Hi", "Dear Dr. X,",
                               attachments=L.row_attachments({"Attachment": ""}))
         self.assertEqual(self.names(msg), ["cv.pdf"])

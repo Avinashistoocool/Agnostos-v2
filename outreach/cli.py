@@ -19,7 +19,7 @@ from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
-from .config import MODEL_PRICES, PROVIDERS, ConfigError, settings
+from .config import COLD_DAILY_HARD_CAP, MODEL_PRICES, PROVIDERS, ConfigError, settings
 from .batches import plan_batches, run_batches, split_queries
 from .discover import COUNTRY_GROUPS
 from .enrich import OpenAlexClient
@@ -317,8 +317,13 @@ def cmd_send(args) -> int:
         settings.send_delay_max = args.delay_max
     if args.min_probability is not None:
         settings.send_min_probability = args.min_probability
+    else:
+        # Cold first emails never go to weak matches, even if .env says 0.
+        settings.send_min_probability = max(settings.send_min_probability,
+                                            settings.cold_min_probability)
     if args.limit:
         settings.daily_send_cap = args.limit
+    settings.daily_send_cap = min(settings.daily_send_cap, COLD_DAILY_HARD_CAP)
 
     path = settings.require_target_xlsx(args.xlsx)
     profile = parse_resume(settings.require_resume(args.resume))
@@ -395,8 +400,13 @@ def cmd_send(args) -> int:
               f"{settings.send_min_probability}%")
         if args.top:
             print(f" Mailing only the {args.top} highest-probability rows.")
-        if settings.attachments:
+        if settings.attachments and settings.cold_attach_cv:
             print(f" Attachments: {', '.join(Path(a).name for a in settings.attachments)}")
+        else:
+            print(f" No attachment on first emails (COLD_ATTACH_CV=false); CV link: "
+                  f"{settings.cv_url or '-'}")
+        print(f" Max {settings.max_per_domain_week} cold emails per domain per 7 days; "
+              "bounced, student/shared, suspect and no-cold-email addresses are skipped.")
         if start_at:
             print(f" Scheduled start: {start_at:%a %d %b %Y %H:%M} (your local time)")
         if window:
@@ -461,12 +471,14 @@ def cmd_send(args) -> int:
               f"of {settings.daily_send_cap}")
 
     with Mailer(settings, profile, dry_run=dry_run, redirect_to=review_to) as mailer:
+        from .send_guard import ColdGuard
+        guard = None if review_to else ColdGuard.from_settings(settings, path)
         updates = mailer.send_batch(rows, progress=progress, resend=args.resend,
                                     top=args.top,
                                     allow_unverified=args.allow_unverified,
                                     window=window, wait_for_window=args.wait,
                                     on_update=None if dry_run else checkpoint,
-                                    initial_sent_by_date=initial_sent)
+                                    initial_sent_by_date=initial_sent, guard=guard)
     if held[0]:
         print(f"\n {held[0]} row(s) held: outside their local {window.spec} window. "
               "Re-run later, or add --wait to sit until each window opens.")
@@ -650,9 +662,11 @@ def cmd_resend(args) -> int:
         s, smtp_host=s.resend_smtp_host, smtp_port=s.resend_smtp_port,
         smtp_security=s.resend_smtp_security, smtp_user=s.resend_smtp_user,
         smtp_password=s.resend_smtp_password, smtp_from=s.resend_smtp_from,
-        smtp_auth="password", reply_to="", daily_send_cap=args.limit or s.resend_daily_cap,
+        smtp_auth="password", reply_to="",
+        daily_send_cap=min(args.limit or s.resend_daily_cap, COLD_DAILY_HARD_CAP),
         send_delay_min=args.delay_min if args.delay_min is not None else s.send_delay_min,
-        send_delay_max=args.delay_max if args.delay_max is not None else s.send_delay_max)
+        send_delay_max=args.delay_max if args.delay_max is not None else s.send_delay_max,
+        send_min_probability=max(s.send_min_probability, s.cold_min_probability))
     _h(f"RESEND ORIGINAL EMAILS FROM {alt.smtp_from or '?'} "
        f"({'LIVE' if args.live else 'DRY RUN'})")
     if args.live and not (alt.smtp_user and alt.smtp_password):
@@ -797,9 +811,11 @@ def cmd_resend(args) -> int:
             print(_safe(f"       -> {result.get('detail', '')[:140]}"))
 
     with Mailer(alt, profile, dry_run=not args.live) as mailer:
+        from .send_guard import ColdGuard
         updates = mailer.send_batch(rows, progress=progress, resend=True,
                                     window=window, wait_for_window=args.wait,
-                                    on_update=record if args.live else None)
+                                    on_update=record if args.live else None,
+                                    guard=ColdGuard.from_settings(s, path))
     held = len(rows) - len(updates)
     c = Counter(u["status"] for u in updates)
     print(f"\n Done. {dict(c)}" + (f" | {held} not reached (cap/window)" if held else ""))
@@ -986,7 +1002,7 @@ def cmd_archive_sent(args) -> int:
             when = None
         msg = mailer.build_message(r["email"], r.get("name", ""),
                                    r.get("subject") or "Summer research internship enquiry",
-                                   r["body"])
+                                   r["body"], cv_link=False)
         items.append((msg, when, r.get("message_id", ""), "first"))
     for q in load_queue(settings.output_dir / "reply_queue.json"):
         if not q.get("sent_at") or not q.get("body"):
@@ -994,7 +1010,8 @@ def cmd_archive_sent(args) -> int:
         when = datetime.strptime(q["sent_at"][:19], "%Y-%m-%d %H:%M:%S")
         try:
             msg = mailer.build_reply(q["email"], q.get("name", ""), q["subject"], q["body"],
-                                     q.get("in_reply_to", ""), q.get("references", ""))
+                                     q.get("in_reply_to", ""), q.get("references", ""),
+                                     attachments=q.get("attachments"))
         except ValueError:
             continue
         items.append((msg, when, q.get("message_id", ""), q.get("kind", "reply")))
@@ -1215,8 +1232,15 @@ def cmd_legacy(args) -> int:
             print(" Aborted.")
             return 2
         import random, time
+        from .send_guard import ColdGuard
+        guard = ColdGuard.from_settings(settings)
         with Mailer(alt, profile, dry_run=not args.live) as mailer:
             for i, r in enumerate(todo):
+                why = guard.check({"email": r.get("Email", ""), "name": r.get("Name", ""),
+                                   "email_status": r.get("Email Status", "")})
+                if why:
+                    print(_safe(f"  held: {r['Name']} <{r['Email']}>: {why}"))
+                    continue
                 if args.live and not window.ready({
                     "country": r.get("Country") or _tld_country(r.get("Email", ""))
                 }):
@@ -1230,6 +1254,7 @@ def cmd_legacy(args) -> int:
                     continue
                 try:
                     mailer.deliver(msg)
+                    guard.record({"email": r.get("Email", "")})
                     if args.live:
                         r["Send Status"], r["Sent At"] = "sent", f"{datetime.now():%Y-%m-%d %H:%M:%S}"
                         r["Message ID"] = msg["Message-ID"]
@@ -1260,7 +1285,7 @@ def cmd_replies(args) -> int:
         newly = 0
         for q in existing:
             if not q.get("approved") and not q.get("sent_at") and q.get("body") \
-                    and q.get("action") != "none":
+                    and q.get("action") != "none" and not q.get("skip"):
                 q["approved"] = True
                 newly += 1
         if newly:
@@ -1269,7 +1294,8 @@ def cmd_replies(args) -> int:
 
     if args.send:
         items = [q for q in load_queue(queue_path)
-                 if q.get("approved") and not q.get("sent_at") and q.get("body")]
+                 if q.get("approved") and not q.get("sent_at") and q.get("body")
+                 and not q.get("skip")]
         _h(f"SEND FOLLOW-UPS ({'LIVE' if args.live else 'DRY RUN'})")
         if args.live:
             today = f"{datetime.now():%Y-%m-%d}"
@@ -1322,7 +1348,8 @@ def cmd_replies(args) -> int:
                 try:
                     msg = mailer.build_reply(q["email"], q.get("name", ""), q["subject"],
                                              q["body"], q.get("in_reply_to", ""),
-                                             q.get("references", ""))
+                                             q.get("references", ""),
+                                             attachments=q.get("attachments"))
                     mailer.deliver(msg)
                     status = "sent" if args.live else "dry-run"
                 except Exception as exc:

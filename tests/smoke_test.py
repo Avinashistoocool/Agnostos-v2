@@ -10,6 +10,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _isolate  # noqa: F401,E402  (must precede outreach imports)
+
 from outreach.config import settings
 from outreach.excel_io import (load_for_sending, load_targets, mark_sent,
                                update_workbook, write_new_workbook)
@@ -231,6 +234,10 @@ def main() -> int:
 
     print("[8] mailer dry-run + attachments")
     settings.attachments = [str(settings.resume_path)]
+    cold = Mailer(replace(settings, cold_attach_cv=False), profile, dry_run=True)
+    cold_msg = cold.send_one(rows[0])["message"]
+    assert not list(cold_msg.iter_attachments()), "cold first email attached the CV"
+    settings.cold_attach_cv = True
     mailer = Mailer(settings, profile, dry_run=True)
     updates = mailer.send_batch(rows)
     assert len(updates) == 8 and all(u["status"] == "dry-run" for u in updates)

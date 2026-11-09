@@ -7,6 +7,9 @@ import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _isolate  # noqa: F401,E402  (must precede outreach imports)
+
 from outreach.config import ConfigError, _require_file
 from outreach.resume_parser import parse_resume
 

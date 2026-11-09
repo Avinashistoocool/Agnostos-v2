@@ -408,6 +408,7 @@ def load_for_sending(path: str | Path, sheet: str | None = None) -> list[dict]:
                 "message_id": str(get("Message ID") or "").strip(),
                 "reply_status": str(get("Reply Status") or "").strip(),
                 "email_status": str(get("Email Status") or "").strip().lower(),
+                "review_flags": str(get("Review Flags") or "").strip(),
                 "suggested_email": str(get("Suggested Email") or "").strip(),
             })
     _apply_pending(path, rows)
