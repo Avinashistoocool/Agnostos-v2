@@ -449,6 +449,22 @@ This reads `output/programs/internship_programs.json` (CERN, EPFL, ITER, ...) an
 
 Tests: `python tests/program_reminders_test.py`.
 
+### `coordinators`: one email per internship-programme office
+
+```bash
+python -m outreach.cli coordinators [--send] [--live] [--yes] [--only ID ...] [--local-window 9-17] [--wait] [--weekends] [--xlsx PATH]
+```
+
+Reads `output/programs/coordinator_outreach.xlsx` (sheet `Outreach`: id, programme, contact name, role, email, source_url, subject, body, attachment path, approved, sent_at, notes, country, message_id). The drafts and the `Skipped` sheet are built by `output/programs/make_coordinator_outreach.py`.
+
+- Only rows with `approved` = `yes` and an empty `sent_at` are considered. Without `--send` the command only lists them; `--send` builds every message (dry run); `--send --live` asks `[Y/N]` and sends.
+- Mail goes out from the main IITD account (`SMTP_*`). Each message carries only the CV in its row's `attachment path` (the `ATTACHMENTS` setting is ignored); a missing file skips the row. The body already has its sign-off, so no extra signature is added.
+- Rows are sent on weekdays between 9:00 and 17:00 in the office's local time (`country` column). Outside that window a row is left for a later run, or held with `--wait`. `--local-window any` turns this off.
+- The self-funding guard (`CAN_SELF_FUND`) blocks any body that offers to pay one's own way.
+- After each real send, `sent_at` and `message_id` are written back, so a row is never mailed twice.
+
+Tests: `python tests/coordinators_test.py`.
+
 ### Reading every conversation
 
 Mail sent over SMTP doesn't appear in your mail app's **Sent** folder, so a professor's answer shows up without the email it answers. Two fixes:
@@ -470,7 +486,9 @@ python -m outreach.cli legacy --send                      # dry run
 python -m outreach.cli legacy --send --live               # send approved letters from RESEND_SMTP_* (your Gmail)
 ```
 
-`legacy` finds high-impact, still-active researchers in your topics (`--topics`, worldwide by default, `--min-h 60`), plus anyone you name with `--include`. It keeps only physicists and fetches their own small-team papers, so a letter never credits them with a 3,000-author collaboration paper. Addresses come from the same strict finder as `verify`, and an address at an unrelated institution or a non-academic domain is rejected. Public figures with no published address are listed with a note to use their official contact page.
+`legacy` finds high-impact, still-active researchers in your topics (`--topics`, worldwide by default, `--min-h 60`), plus anyone you name with `--include`. It keeps only physicists (pass `--any-field` to keep robotics/ML/interpretability people too, and `--match REGEX` to require a topic match) and fetches their own small-team papers, so a letter never credits them with a 3,000-author collaboration paper. Anyone already in `legacy.xlsx` or already mailed (`professors.xlsx` / `send_log.csv`) is skipped. Addresses come from the same strict finder as `verify`, and an address at an unrelated institution or a non-academic domain is rejected. Public figures with no published address are listed with a note to use their official contact page.
+
+Live legacy sends use `LEGACY_FOCUS_KEYWORDS` (falls back to `FOCUS_KEYWORDS`) as their focus gate, so approved non-physics letters aren't held back.
 
 The letter is different from an internship request. It's a short, specific, humble note: one idea of theirs that shaped your thinking, one real project of yours, and a small ask, either a summer visit through a real route (CERN/DESY summer student programmes, DAAD WISE, Mitacs, Charpak, EPFL/ETH summer programmes, Caltech SURF, or their own group) or a pointer to someone who could help. It never invents how you found their work.
 

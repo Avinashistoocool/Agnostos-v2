@@ -628,6 +628,11 @@ def cmd_program_reminders(args) -> int:
     return run_reminders(args)
 
 
+def cmd_coordinators(args) -> int:
+    from .coordinators import cmd_coordinators as run_coordinators
+    return run_coordinators(args)
+
+
 def cmd_resend(args) -> int:
     """Re-deliver the ORIGINAL email (no redraft) from a second account to
     professors who never answered, and/or whose first mail bounced."""
@@ -2101,6 +2106,22 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--programs", metavar="PATH",
                     help="Programme JSON (default output/programs/internship_programs.json)")
     pr.set_defaults(func=cmd_program_reminders)
+
+    co = sub.add_parser("coordinators",
+                        help="Email internship-programme coordinators (approved rows of "
+                             "output/programs/coordinator_outreach.xlsx), each with its own CV")
+    co.add_argument("--xlsx", help="Workbook (default output/programs/coordinator_outreach.xlsx)")
+    co.add_argument("--send", action="store_true",
+                    help="Build every approved message (dry run unless --live)")
+    co.add_argument("--live", action="store_true", help="With --send: actually send")
+    co.add_argument("--yes", action="store_true", help="Skip the [Y/N] confirmation")
+    co.add_argument("--only", nargs="+", metavar="ID", help="Restrict to these programme ids")
+    co.add_argument("--local-window", metavar="H-H",
+                    help="Recipient local hours on weekdays (default 9-17; 'any' = off)")
+    co.add_argument("--wait", action="store_true",
+                    help="Wait for each recipient's window instead of skipping the row")
+    co.add_argument("--weekends", action="store_true", help="Allow Saturday/Sunday")
+    co.set_defaults(func=cmd_coordinators)
 
     rs = sub.add_parser("resend",
                         help="Re-deliver the original email from a second account "
