@@ -1,0 +1,23 @@
+{
+  "_about": "Cold first emails (send, resend, legacy) skip these people and domains. Built from replies categorised (f) 'group/chair does not offer internships' in output/diagnosis/diag-replies.md, plus programme-only institutions (ITER, EPFL E3) and TUM chairs that cannot host. Replies/follow-ups to these people are NOT blocked. Domain entries also cover subdomains.",
+  "domains": [
+    {"domain": "iter.org", "reason": "ITER takes interns only via its formal 6-month programme (Pitts, 16 Oct 2026)"},
+    {"domain": "epfl.ch", "reason": "EPFL selects summer interns only through the E3 programme (Ceriotti, 4 Nov 2026)"},
+    {"domain": "uni-bonn.de", "reason": "Bonn physics: no summer student internships (Schott, 15 Oct 2026)"},
+    {"domain": "robots.ox.ac.uk", "reason": "Oxford Robotics Institute cannot host international interns (Fallon, 26 Oct 2026)"}
+  ],
+  "people": [
+    {"name": "Johannes Fottner", "email": "j.fottner@tum.de", "reason": "TUM chair offers no research internships (2 Nov 2026)"},
+    {"name": "Stefan Wagner", "email": "stefan.wagner@tum.de", "reason": "TUM chair offers no internships (2 Nov 2026)"},
+    {"name": "Nils Thuerey", "email": "nils.thuerey@tum.de", "reason": "TUM chair cannot host (3 Nov 2026)"},
+    {"name": "Matthias Althoff", "email": "althoff@tum.de", "reason": "TUM CPS: DAAD/CPS programme only, no direct funding (3 Nov 2026)"},
+    {"name": "Matthias Ludwig Schott", "email": "mschott@uni-bonn.de", "reason": "no summer student internships in the group (15 Oct 2026)"},
+    {"name": "Veronica Sanz", "email": "veronica.sanz@uv.es", "reason": "does not offer summer internship positions (16 Oct 2026)"},
+    {"name": "Peter Baumann", "email": "pbaumann@constructor.university", "reason": "does not run such internships (21 Oct 2026)"},
+    {"name": "Christian Janiesch", "email": "christian.janiesch@tu-dortmund.de", "reason": "does not take summer students (23 Oct 2026)"},
+    {"name": "Maurice Fallon", "email": "mfallon@robots.ox.ac.uk", "reason": "cannot host international interns (26 Oct 2026)"},
+    {"name": "Dennis Noll", "email": "nollde@stanford.edu", "reason": "does not offer these positions (6 Nov 2026)"},
+    {"name": "R.A. Pitts", "email": "richard.pitts@iter.org", "reason": "ITER formal programme only (16 Oct 2026)"},
+    {"name": "Michele Ceriotti", "email": "michele.ceriotti@epfl.ch", "reason": "EPFL E3 programme only (4 Nov 2026)"}
+  ]
+}

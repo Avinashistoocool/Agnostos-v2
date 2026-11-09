@@ -11,6 +11,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from openpyxl import Workbook, load_workbook
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _isolate  # noqa: F401,E402  (must precede outreach imports)
+
 from outreach import coordinators as co
 from outreach.cli import main
 from outreach.config import settings

@@ -11,6 +11,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _isolate  # noqa: F401,E402  (must precede outreach imports)
+
 from outreach.config import settings
 from outreach.excel_io import load_targets
 from outreach.llm import LLMEvaluator
@@ -57,7 +60,7 @@ class Handler(BaseHTTPRequestHandler):
                     "content": json.dumps({
                         "probability": 73,
                         "justification": "Direct overlap on transformer-based jet tagging.",
-                        "subject": "Summer internship enquiry: jet tagging with transformers",
+                        "subject": "jet tagging with transformers / my ParT tagger (IIT Delhi)",
                         "body": "Dear Professor,\n\nYour recent work caught my eye.\n\nBest,\nAlex",
                     }),
                 },
@@ -97,7 +100,7 @@ def main() -> int:
     ev.evaluate_one(prof, model="gpt-4.1")
     assert prof.llm_status.startswith("ok"), prof.llm_status
     assert prof.probability == 73, prof.probability
-    assert prof.email_subject.startswith("Summer internship"), prof.email_subject
+    assert prof.email_subject.startswith("jet tagging"), prof.email_subject
     assert "\n" in prof.email_body
     print(f"    ok: {prof.probability}% | {prof.email_subject}")
 

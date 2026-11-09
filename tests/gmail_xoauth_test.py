@@ -14,6 +14,9 @@ from urllib.parse import parse_qs
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _isolate  # noqa: F401,E402  (must precede outreach imports)
+
 from outreach import google_oauth, mailbox, mailer, replies
 from outreach.config import ConfigError, settings
 from outreach.google_oauth import access_token, clear_cache, xoauth2_b64, xoauth2_bytes

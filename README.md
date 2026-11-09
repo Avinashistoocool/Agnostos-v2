@@ -369,7 +369,9 @@ python -m outreach.cli send --live --top 10 --min-probability 60
 - `--top N` ranks the drafted rows by acceptance probability and mails the best N. This is usually what you want.
 - `--min-probability N` sets a quality floor instead of a count.
 - `--limit N` caps how many emails are actually sent in this run, applied after the `--top` ordering.
-- `DAILY_SEND_CAP` in `.env` is the default for `--limit`: a per-run cap on real sends (it does not count earlier runs that day).
+- `DAILY_SEND_CAP` in `.env` is the default for `--limit`. Cold first emails (`send`, `resend`, `legacy`) are clamped at 40 per day in code even if `.env` or `--limit` asks for more.
+
+**Who is never cold-mailed.** `send`, `resend` and `legacy` skip, with a reason in the log: any address that bounced on either account (`Reply Status` starting with "bounced", bounce records in `send_log.csv`, `output/FAILURES.json`; reason `skipped: bounced before`); people and domains in `output/no_cold_email.json`; student, alumni and shared mailboxes (`@postgrad.`, `@studenti.`, `@g.harvard.edu`, `name.20@ucl.ac.uk`, `lehre-`, `pec`); addresses without the first initial plus surname; `suspect` addresses (unless `--allow-unverified`); drafts flagged `REJECTED DRAFT`; and any institution domain that already had `MAX_PER_DOMAIN_WEEK` (3) cold emails in the last 7 days.
 
 Rows already marked `sent` are skipped automatically, so an interrupted run is safe to resume. Dry runs never block a later real send.
 
@@ -494,7 +496,7 @@ The letter is different from an internship request. It's a short, specific, humb
 
 Review `output/legacy.xlsx` and set **Approved = yes** for each letter you want to send. `--approve-all` covers only addresses the finder verified; addresses typed in by hand must be approved row by row. Sends are spaced 2-5 minutes apart, 10 per run (`--limit`).
 
-Letters attach the global `ATTACHMENTS` files by default. To send different files with one letter, fill that row's **Attachment** column with a semicolon-separated list of paths (for example a portfolio PDF and a programme-specific CV); `none` sends that letter without attachments. A row whose listed file is missing is held, not sent.
+Letters attach nothing by default (cold first emails link `CV_URL` instead; set `COLD_ATTACH_CV=true` to attach the global `ATTACHMENTS`). To send specific files with one letter, fill that row's **Attachment** column with a semicolon-separated list of paths (for example a portfolio PDF and a programme-specific CV); `none` sends that letter without attachments. A row whose listed file is missing is held, not sent.
 
 ### `resend` — re-deliver the original email from a second account
 
@@ -627,7 +629,13 @@ Every setting lives in `.env` (see `.env.example`, which is split into a require
 | `MIN_LOCAL_SCORE` | `0.25` | Local filter threshold |
 | `HUMANIZE_REWRITE` | `true` | Paid rewrite pass for stubborn drafts |
 | `HUMANIZE_THRESHOLD` | `10` | AI-tell score that triggers a rewrite |
-| `ATTACHMENTS` | — | Semicolon-separated; CV, transcript |
+| `ATTACHMENTS` | — | Semicolon-separated; CV, transcript. Attached to replies that say so; cold first emails only with `COLD_ATTACH_CV=true` |
+| `COLD_ATTACH_CV` | `false` | Attach `ATTACHMENTS` to cold first emails (send/resend/legacy) |
+| `CV_URL` | `https://avinashistoocool.github.io/` | CV link quoted in first emails and added to the signature when nothing is attached |
+| `MAX_PER_DOMAIN_WEEK` | `3` | Max cold first emails per institution domain per rolling 7 days (from `send_log.csv`) |
+| `NAME_MATCH_STRICT` | `true` | Cold sends need first initial + surname in the address |
+| `NO_COLD_EMAIL_FILE` | `output/no_cold_email.json` | People/domains that never host ad-hoc interns; skipped at send time |
+| `CONFIRMED_FACTS_FILE` | `output/confirmed_facts.md` | Facts and numbers the drafting prompt may quote; other numbers are stripped |
 | `OPENALEX_API_KEY` | — | Free; avoids the shared per-IP rate limit |
 | `DISCOVER_COUNT` / `DISCOVER_BATCHES` | `1000` / `4` | `discover` headcount and batch split |
 | `DISCOVER_QUERIES` | — | `;`-separated topics (default: resume interests) |
@@ -637,11 +645,11 @@ Every setting lives in `.env` (see `.env.example`, which is split into a require
 | `DISCOVER_PRESTIGE_WEIGHT` | `1.0` | How much university rank counts against topic fit |
 | `VERIFY_WORKERS` | `4` | Parallel email lookups |
 | `SEND_DELAY_MIN/MAX` | `90`/`240` | Seconds between emails |
-| `DAILY_SEND_CAP` | `25` | Stay under provider limits |
+| `DAILY_SEND_CAP` | `25` | Stay under provider limits. Cold first emails are clamped at 40/day in code |
 | `SEND_LOCAL_WINDOW` | — | Recipient-local hours to send in, e.g. `9-11` |
 | `IMAP_HOST/PORT/USER/PASSWORD` | from SMTP | Mailbox for `check-replies` |
 | `IMAP_FOLDERS` | `INBOX;SPAM;Junk;Junk Email` | Folders to scan for replies |
-| `SEND_MIN_PROBABILITY` | `0` | Standing quality floor |
+| `SEND_MIN_PROBABILITY` / `COLD_MIN_PROBABILITY` | `40` / `40` | Standing quality floor; cold sends never go below `COLD_MIN_PROBABILITY` unless `--min-probability` is given |
 | `RESPECT_ROBOTS` | `true` | Mode A |
 
 ### Gmail via OAuth (no app password)

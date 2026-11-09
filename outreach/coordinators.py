@@ -72,7 +72,8 @@ def build(mailer: Mailer, row: dict):
     mailer.s = replace(base, attachments=[str(att)])
     try:
         return mailer.build_message(str(row["email"]).strip(), str(row.get("contact name", "")).strip(),
-                                    str(row["subject"]).strip(), str(row["body"]))
+                                    str(row["subject"]).strip(), str(row["body"]),
+                                    attachments=[str(att)], cv_link=False)
     finally:
         mailer.s = base
 
