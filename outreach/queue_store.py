@@ -48,6 +48,11 @@ def workbook_operation(output_dir: Path, timeout: float = 0):
     return _lock(Path(output_dir) / ".desktop_workbook.operation.lock", timeout)
 
 
+def legacy_operation(output_dir: Path, timeout: float = 0):
+    """Serialize writers of legacy.xlsx only."""
+    return _lock(Path(output_dir) / ".legacy_workbook.operation.lock", timeout)
+
+
 def lock_held(path: Path) -> bool:
     """Non-mutating probe for an OS-level InstanceLock owned by another process."""
     path = Path(path)

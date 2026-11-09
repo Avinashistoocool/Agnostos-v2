@@ -2226,9 +2226,15 @@ def main(argv=None) -> int:
             from contextlib import nullcontext
             from .queue_store import QueueBusy, queue_operation, workbook_operation
             if args.command in {"run", "send", "resend", "discover", "verify", "recheck",
-                                    "check-replies", "replace-failed", "legacy", "legacy-researchers"}:
+                                    "check-replies", "replace-failed"}:
                 settings.ensure_dirs()
                 workbook = workbook_operation(settings.output_dir, timeout=10)
+            elif args.command in {"legacy", "legacy-researchers"}:
+                # Legacy only writes legacy.xlsx (professors.xlsx is read-only here), so a
+                # multi-day `send --wait` holding the shared workbook lock must not block it.
+                from .queue_store import legacy_operation
+                settings.ensure_dirs()
+                workbook = legacy_operation(settings.output_dir, timeout=10)
             else:
                 workbook = nullcontext()
             queue = queue_operation(settings.output_dir, timeout=10) \
