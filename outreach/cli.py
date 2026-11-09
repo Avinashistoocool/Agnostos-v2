@@ -1185,6 +1185,8 @@ def cmd_legacy(args) -> int:
                 and (approved(r) or (args.approve_all and r.get("Email Status") == "ok"))]
         held = [r for r in rows if r.get("Draft") and r.get("Email") and r not in todo
                 and r.get("Send Status") != "sent"]
+        # CERN-route letters are the top priority; send them before the rest.
+        todo.sort(key=lambda r: "cern" not in str(r.get("Programme route") or "").lower())
         for r in held:
             print(_safe(f"  held: {r['Name']} <{r['Email']}> (status {r.get('Email Status')}; "
                         "set Approved = yes after checking)"))
