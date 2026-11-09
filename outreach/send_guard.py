@@ -1,4 +1,4 @@
-"""Send-time gate for cold first emails (send, resend, legacy).
+﻿"""Send-time gate for cold first emails (send, resend, legacy).
 
 Every check here is about WHO receives a cold email, never about its wording:
 
@@ -114,11 +114,17 @@ def name_email_problem(name: str, email: str) -> str:
         rest = local.replace(hit, " ", 1).split()
         rest = "".join(rest)
         if not rest:
-            return "surname-only address (no first initial)"
+            return ""  # surname-only addresses are standard for faculty (darve@stanford.edu)
         if rest[0] == initial or rest[-1] == initial or any(
                 g in rest for g in full[:-1] if len(g) >= 3):
             return ""
         return "address does not start with the first initial"
+    # University NetIDs: initials + digits (jc3633@cornell.edu, yy2664@columbia.edu)
+    netid = re.fullmatch(r"([a-z]{2,3})\d{3,5}", re.sub(r"[^a-z0-9]", "", _fold(email).rpartition("@")[0]))
+    if netid:
+        inits = netid.group(1)
+        if inits[0] == initial and inits[-1] == (surnames[-1][0] if surnames else ""):
+            return ""
     return "surname not in address"
 
 

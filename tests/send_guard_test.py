@@ -126,7 +126,10 @@ class MailboxAndNameTests(unittest.TestCase):
               ("Dennis Noll", "nollde@stanford.edu")]
         for name, addr in ok:
             self.assertEqual(G.name_email_problem(name, addr), "", (name, addr))
-        bad = [("Matthias Althoff", "althoff@tum.de"),          # surname only
+        ok2 = [("Matthias Althoff", "althoff@tum.de"), ("Jane Chen", "jc3633@cornell.edu")]
+        for name, addr in ok2:
+            self.assertEqual(G.name_email_problem(name, addr), "", (name, addr))
+        bad = [
                ("Filippo Vicentini", "francesco.vicentini@epfl.ch"),
                ("Jens Eisert", "peter.eisert@hhi.fraunhofer.de"),
                ("Rob Ashmore", "emily.ashmore@brighton-hove.gov.uk"),
@@ -138,8 +141,8 @@ class MailboxAndNameTests(unittest.TestCase):
 
     def test_guard_reasons(self):
         guard = G.ColdGuard()
-        self.assertEqual(guard.check(row(2, "althoff@tum.de", "Matthias Althoff")),
-                         "skipped: name/email mismatch (surname-only address (no first initial))")
+        self.assertEqual(guard.check(row(2, "althoff@tum.de", "Matthias Althoff")), "")
+        self.assertTrue(guard.check(row(2, "sijia@mit.edu", "Kevin Brown")).startswith("skipped: name/email mismatch"))
         self.assertEqual(guard.check(row(2, "j.doe@uni.de", "Jane Doe", email_status="suspect")),
                          "skipped: suspect address")
         self.assertEqual(guard.check(row(2, "j.doe@uni.de", "Jane Doe", email_status="suspect"),
