@@ -494,6 +494,8 @@ The letter is different from an internship request. It's a short, specific, humb
 
 Review `output/legacy.xlsx` and set **Approved = yes** for each letter you want to send. `--approve-all` covers only addresses the finder verified; addresses typed in by hand must be approved row by row. Sends are spaced 2-5 minutes apart, 10 per run (`--limit`).
 
+Letters attach the global `ATTACHMENTS` files by default. To send different files with one letter, fill that row's **Attachment** column with a semicolon-separated list of paths (for example a portfolio PDF and a programme-specific CV); `none` sends that letter without attachments. A row whose listed file is missing is held, not sent.
+
 ### `resend` — re-deliver the original email from a second account
 
 ```bash

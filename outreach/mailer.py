@@ -167,11 +167,17 @@ class Mailer:
                                  "file exists; fix ATTACHMENTS in .env or edit the body")
         return msg
 
-    def _attach_files(self, msg: EmailMessage) -> int:
+    def _attach_files(self, msg: EmailMessage, paths: list[str] | None = None) -> int:
+        """Attach `paths` (a per-message list) or, when None, the global ATTACHMENTS.
+        Missing global files are skipped; a missing per-message file is an error,
+        since that row explicitly promised it."""
+        explicit = paths is not None
         n = 0
-        for raw_path in self.s.attachments:
+        for raw_path in (paths if explicit else self.s.attachments):
             path = Path(raw_path)
-            if not path.exists():
+            if not path.is_file():
+                if explicit:
+                    raise FileNotFoundError(f"attachment not found: {raw_path}")
                 continue
             ctype, _ = mimetypes.guess_type(str(path))
             maintype, _, subtype = (ctype or "application/octet-stream").partition("/")
@@ -208,7 +214,8 @@ class Mailer:
 
     # ---------- message ----------
     def build_message(self, to_email: str, to_name: str, subject: str,
-                      body: str) -> EmailMessage:
+                      body: str, attachments: list[str] | None = None) -> EmailMessage:
+        """`attachments` replaces the global ATTACHMENTS for this one message."""
         msg = EmailMessage()
         from_name = self.s.smtp_from_name or (self.profile.name if self.profile else "")
         msg["From"] = formataddr((from_name, self.s.smtp_from)) if from_name else self.s.smtp_from
@@ -221,7 +228,7 @@ class Mailer:
             msg["Reply-To"] = self.s.reply_to
         full_body = body.rstrip() + "\n" + self.signature
         msg.set_content(full_body)
-        self._attach_files(msg)
+        self._attach_files(msg, attachments)
         return msg
 
     # ---------- sending ----------

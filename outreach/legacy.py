@@ -32,7 +32,19 @@ from .discover import Discoverer, resolve_countries
 COLUMNS = ["Name", "Email", "Institution", "Country", "h-index", "Citations",
            "Known for", "Recent work", "Programme route", "Why them", "Source",
            "Email Status", "Email Notes", "Subject", "Draft", "Approved",
-           "Send Status", "Sent At", "Message ID", "OpenAlex ID"]
+           "Send Status", "Sent At", "Message ID", "OpenAlex ID", "Attachment"]
+
+
+def row_attachments(row: dict) -> list[str] | None:
+    """Per-row "Attachment" cell: semicolon-separated file paths that replace the
+    global ATTACHMENTS for that letter. Blank means use ATTACHMENTS; "none"
+    sends the letter with no attachment."""
+    raw = str(row.get("Attachment") or "").strip()
+    if not raw:
+        return None
+    if raw.lower() in {"none", "-"}:
+        return []
+    return [p.strip().strip('"') for p in raw.split(";") if p.strip()]
 
 # Summer routes a non-EU undergraduate can actually apply to. The LLM may only
 # name one of these (or ask the researcher which they'd suggest).
@@ -273,8 +285,8 @@ def save(path: Path, rows: list[dict]) -> None:
     ws.append(COLUMNS)
     for r in rows:
         ws.append([r.get(c, "") for c in COLUMNS])
-    for col, w in zip("ABCDEFGHIJKLMNOPQRST", (24, 32, 30, 7, 8, 10, 40, 50, 50, 40, 22, 10,
-                                              40, 40, 80, 9, 10, 18, 30, 30)):
+    for col, w in zip("ABCDEFGHIJKLMNOPQRSTU", (24, 32, 30, 7, 8, 10, 40, 50, 50, 40, 22, 10,
+                                               40, 40, 80, 9, 10, 18, 30, 30, 50)):
         ws.column_dimensions[col].width = w
     ws.freeze_panes = "B2"
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -1220,7 +1220,12 @@ def cmd_legacy(args) -> int:
                 }):
                     print(_safe(f"  held: {r['Name']} <{r['Email']}>: local window closed"))
                     continue
-                msg = mailer.build_message(r["Email"], r["Name"], r["Subject"], r["Draft"])
+                try:
+                    msg = mailer.build_message(r["Email"], r["Name"], r["Subject"], r["Draft"],
+                                               attachments=L.row_attachments(r))
+                except FileNotFoundError as exc:
+                    print(_safe(f"  held: {r['Name']} <{r['Email']}>: {exc}"))
+                    continue
                 try:
                     mailer.deliver(msg)
                     if args.live:
