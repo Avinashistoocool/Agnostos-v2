@@ -393,6 +393,18 @@ schtasks /Create /TN AgnostosSend /SC WEEKLY /D MON,TUE,WED,THU,FRI /ST 12:30 `
 
 Each successful send also stores its `Message ID`, which `check-replies` uses to match answers.
 
+**Local Windows recovery setup.** This workstation also uses the tasks
+`Agnostos IITD sender` and `Agnostos Gmail legacy sender`, pointing to the
+local `output\run_iitd_loop.ps1` and `output\run_gmail_loop.ps1` scripts.
+They start at login and retry hourly if not already running, with no task
+execution timeout. Each loop has a mutex to prevent duplicate loop instances.
+The weekday launcher calls these same scripts; it must not launch identical
+Gmail resends. The Gmail loop sends only approved legacy/CERN letters.
+These are local operational files, not installed by cloning the repository.
+The PC must remain awake, online and signed in. All daily, domain and
+recipient-local window limits still apply: `MAX_PER_DOMAIN_WEEK=3` also
+limits `cern.ch` to three cold emails per rolling week, not three per group.
+
 ### `check-replies` — who answered
 
 ```bash
