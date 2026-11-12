@@ -405,6 +405,28 @@ The PC must remain awake, online and signed in. All daily, domain and
 recipient-local window limits still apply: `MAX_PER_DOMAIN_WEEK=3` also
 limits `cern.ch` to three cold emails per rolling week, not three per group.
 
+**Deferred address verification.** The `send`, `resend` and `legacy --send`
+paths do not perform DNS probes or web searches. Unless explicitly overridden
+with `send --allow-unverified`, recipients without `Email Status = ok`, missing
+addresses and identity-check failures are skipped and stored once in
+`output\verification_queue.json`. They do not consume delivery slots; mailing
+continues with verified recipients. Legacy discovery/drafting and sending must
+be separate commands.
+
+Run the verification queue separately later:
+
+```powershell
+python -m outreach.cli verify --deferred --dry-run
+python -m outreach.cli verify --deferred --repair --apply --top 20
+```
+
+The preview performs no network requests or workbook writes. The second command
+checks queued addresses and updates their source workbook; a workbook currently
+used by a sender is postponed, not modified concurrently. Completed checks are
+not repeated unless they need review and `--repair` is specified. Changed or
+already-sent rows are not overwritten. If a legacy address changes, its approval
+is cleared so the new recipient can be reviewed. Verification never sends mail.
+
 ### `check-replies` — who answered
 
 ```bash

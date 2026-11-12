@@ -368,7 +368,8 @@ def write_new_workbook(path: str | Path, professors: list[Professor],
     return path
 
 
-def load_for_sending(path: str | Path, sheet: str | None = None) -> list[dict]:
+def load_for_sending(path: str | Path, sheet: str | None = None,
+                     include_missing: bool = False) -> list[dict]:
     """Read finalized rows (with drafts) for the dispatch module."""
     path = Path(path)
     wb = load_workbook(path, data_only=True)
@@ -386,7 +387,7 @@ def load_for_sending(path: str | Path, sheet: str | None = None) -> list[dict]:
 
             body = get("Custom Email Draft")
             email = get("Email Address") or get("Email")
-            if not body or not email:
+            if not body or (not email and not include_missing):
                 continue
             prob_raw = str(get("Probability of Acceptance") or "").strip().rstrip("%")
             try:
@@ -397,7 +398,7 @@ def load_for_sending(path: str | Path, sheet: str | None = None) -> list[dict]:
                 "sheet": ws.title,
                 "row": r,
                 "name": get("Professor Name") or get("Name") or "",
-                "email": str(email).strip(),
+                "email": str(email or "").strip(),
                 "institution": get("Institution") or "",
                 "country": str(get("Country") or "").strip(),
                 "subject": get("Email Subject") or "",

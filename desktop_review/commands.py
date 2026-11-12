@@ -69,7 +69,7 @@ COMMANDS = {
                     workers="int", dry_run="bool"),
     "verify": spec("Verify or repair addresses", xlsx="file", sheet="text",
                    top="int", repair="bool", apply="bool", probe_smtp="bool",
-                   workers="int", only_missing="bool", dry_run="bool"),
+                   workers="int", only_missing="bool", dry_run="bool", deferred="bool"),
 }
 
 SAFE_TEXT = re.compile(r"^[^\x00-\x1f\x7f]{1,300}$")

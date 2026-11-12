@@ -327,7 +327,11 @@ def cmd_send(args) -> int:
 
     path = settings.require_target_xlsx(args.xlsx)
     profile = parse_resume(settings.require_resume(args.resume))
-    rows = load_for_sending(path, sheet=args.sheet)
+    rows = load_for_sending(path, sheet=args.sheet, include_missing=True)
+    from .verification_queue import defer_rows
+    from .send_guard import ColdGuard
+    rows = defer_rows(settings.output_dir, path, rows, ColdGuard.from_settings(settings, path),
+                      allow_unverified=args.allow_unverified)
     if settings.focus and not args.no_focus:
         from .focus import in_focus
         focus_text = _focus_text(path)
@@ -754,6 +758,9 @@ def cmd_resend(args) -> int:
     rows.sort(key=lambda r: (ranks.get(str(r["institution"]).strip().lower(), 10_000),
                              not r["reply_status"].lower().startswith("bounced"),
                              r["sent_at"]))
+    from .verification_queue import defer_rows
+    from .send_guard import ColdGuard
+    rows = defer_rows(s.output_dir, path, rows, ColdGuard.from_settings(s, path))
     room = max(0, alt.daily_send_cap - today) if args.live else alt.daily_send_cap
     print(f" Eligible: {len(rows)} | already resent today: {today} | this run: "
           f"up to {min(room, len(rows))}")
@@ -1106,6 +1113,12 @@ def cmd_legacy(args) -> int:
     settings.ensure_dirs()
     path = settings.output_dir / "legacy.xlsx"
     rows = L.load(path)
+    if args.send and (args.find or args.draft):
+        print(" ERROR: Run legacy discovery/drafting separately from --send; mailing never performs lookups.")
+        return 1
+    if args.send and not rows:
+        print(" No legacy rows to send. Run legacy --find --draft separately first.")
+        return 0
     profile = parse_resume(settings.require_resume(args.resume))
 
     if args.find or not rows:
@@ -1200,15 +1213,39 @@ def cmd_legacy(args) -> int:
         todo = [r for r in rows if r.get("Draft") and r.get("Email")
                 and r.get("Send Status") != "sent" and "[FILL" not in r["Draft"]
                 and (approved(r) or (args.approve_all and r.get("Email Status") == "ok"))]
+        from .verification_queue import defer_rows
+        from .send_guard import ColdGuard
+        guard = ColdGuard.from_settings(settings)
+        candidates = [r for r in rows if r.get("Draft") and r.get("Send Status") != "sent"
+                      and (approved(r) or args.approve_all)]
+        normalized = [dict(sheet="Legacy researchers", row=i + 2, name=r.get("Name") or "",
+                           email=r.get("Email") or "", institution=r.get("Institution") or "",
+                           country=r.get("Country") or "", email_status=r.get("Email Status") or "",
+                           _source=r) for i, r in enumerate(candidates)]
+        ready = defer_rows(settings.output_dir, path, normalized, guard)
+        ready_ids = {id(r["_source"]) for r in ready}
+        todo = [r for r in todo if id(r) in ready_ids]
         held = [r for r in rows if r.get("Draft") and r.get("Email") and r not in todo
                 and r.get("Send Status") != "sent"]
         # CERN-route letters are the top priority; send them before the rest.
         todo.sort(key=lambda r: "cern" not in str(r.get("Programme route") or "").lower())
         for r in held:
+            reason = ("deferred for separate verification" if approved(r) else
+                      "set Approved = yes after checking")
             print(_safe(f"  held: {r['Name']} <{r['Email']}> (status {r.get('Email Status')}; "
-                        "set Approved = yes after checking)"))
+                        f"{reason})"))
         if args.live:
             from .legacy_guard import plan_legacy_live
+            # Guard-held rows must not consume this run's selection slots.
+            eligible = []
+            for r in todo:
+                reason = guard.check({"email": r.get("Email", ""), "name": r.get("Name", ""),
+                                      "email_status": r.get("Email Status", "")})
+                if reason:
+                    print(_safe(f"  held: {r['Name']} <{r['Email']}>: {reason}"))
+                else:
+                    eligible.append(r)
+            todo = eligible
             try:
                 todo, held_live, window, room = plan_legacy_live(
                     todo, settings.output_dir / "send_log.csv",
@@ -1225,15 +1262,14 @@ def cmd_legacy(args) -> int:
         else:
             todo = todo[:args.limit]
         if not todo:
-            print(" Nothing approved. Set Approved = yes in legacy.xlsx (or pass --approve-all).")
+            print(" No approved recipients eligible for this run; see the holds above. "
+                  "Unverified recipients stay in verification_queue.json for later.")
             return 0
         print(f" From {alt.smtp_from} to {len(todo)} researcher(s).")
         if args.live and not args.yes and input(" Send now? [Y/N]: ").strip().lower() not in {"y", "yes"}:
             print(" Aborted.")
             return 2
         import random, time
-        from .send_guard import ColdGuard
-        guard = ColdGuard.from_settings(settings)
         with Mailer(alt, profile, dry_run=not args.live) as mailer:
             for i, r in enumerate(todo):
                 why = guard.check({"email": r.get("Email", ""), "name": r.get("Name", ""),
@@ -1862,6 +1898,17 @@ def _write_emails(path: Path, professors) -> None:
 def cmd_verify(args) -> int:
     """Check every address, and optionally hunt down the correct one."""
     settings.ensure_dirs()
+    if args.deferred:
+        from .verification_queue import verify_deferred
+        if args.include_sent or args.only_missing:
+            print(" ERROR: --deferred cannot be combined with --include-sent or --only-missing.")
+            return 1
+        return verify_deferred(
+            settings.output_dir,
+            lambda profs: _verify_rows(profs, args.workers, repair=args.repair,
+                                      apply=args.apply, dns=not args.no_dns, probe=args.probe_smtp),
+            apply=args.apply, dry_run=args.dry_run, workbook=args.xlsx,
+            sheet=args.sheet, top=args.top, retry=args.repair)
     path = settings.require_target_xlsx(args.xlsx)
     _h("EMAIL VERIFICATION")
     professors = load_targets(path, sheet=args.sheet)
@@ -2252,6 +2299,8 @@ def build_parser() -> argparse.ArgumentParser:
     sc.set_defaults(func=cmd_recheck)
 
     sv = sub.add_parser("verify", help="Check (and optionally repair) email addresses")
+    sv.add_argument("--deferred", action="store_true",
+                    help="Check the persistent send-time verification queue in a separate run")
     sv.add_argument("--xlsx", help="Workbook containing the targets")
     sv.add_argument("--sheet", help="Restrict to a single sheet name")
     sv.add_argument("--top", type=int, help="Only check the N highest-probability rows")
@@ -2280,7 +2329,9 @@ def main(argv=None) -> int:
         def invoke():
             from contextlib import nullcontext
             from .queue_store import QueueBusy, queue_operation, workbook_operation
-            if args.command in {"run", "send", "resend", "discover", "verify", "recheck",
+            if args.command == "verify" and args.deferred:
+                workbook = nullcontext()  # deferred worker locks each source workbook separately
+            elif args.command in {"run", "send", "resend", "discover", "verify", "recheck",
                                     "check-replies", "replace-failed"}:
                 settings.ensure_dirs()
                 workbook = workbook_operation(settings.output_dir, timeout=10)
