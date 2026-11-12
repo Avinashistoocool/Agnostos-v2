@@ -1,14 +1,14 @@
 # Agnostos diagnostics
 
-Use this when something isn't working. Start with the quick check, then find your error message in the tables below.
+Use this page when a function of the tool does not work. Start with the quick check. Then find your error message in the tables below.
 
-> **Never paste your `.env` or passwords** into an issue or chat. Redact API keys and `SMTP_PASSWORD`/`IMAP_PASSWORD`.
+> **Never paste your `.env` or your passwords** into an issue or a chat. Remove API keys and `SMTP_PASSWORD`/`IMAP_PASSWORD` first.
 
 ---
 
 ## 1. Quick health check (2 minutes)
 
-Run these from the repo folder, with the virtual environment active:
+Run these commands from the folder of the repository, with the virtual environment active:
 
 ```bash
 python --version                         # must be 3.10+
@@ -20,12 +20,12 @@ python -m outreach.cli send --dry-run --preview 1   # drafts load, nothing is se
 python -m outreach.cli check-replies --dry-run      # IMAP login + reply detection
 ```
 
-| Command | Healthy output |
+| Command | Correct output |
 |---|---|
-| `tls-check` | `ok` on every host, and a trust source of "OS trust store (truststore)" or a certifi path |
+| `tls-check` | `ok` on each host, and a trust source of "OS trust store (truststore)" or a certifi path |
 | `profile` | your name, email, interests and projects |
 | `models` | a list of model IDs |
-| `stats` | counts, plus a "Why so few were sent" list if anything is blocked |
+| `stats` | counts, plus a "Why so few were sent" list if the tool blocks some rows |
 | `send --dry-run` | `dry-run` lines, then `failed=0` |
 | `check-replies --dry-run` | `Folders: INBOX, ...`, then a summary |
 
@@ -40,19 +40,19 @@ The first command that fails tells you which section below to read.
 ssl.SSLCertVerificationError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed:
 unable to get local issuer certificate (_ssl.c:1144)
 ```
-You may also see `APIConnectionError: Connection error.` from the LLM, or empty results from `verify`/`discover`.
+You can also see `APIConnectionError: Connection error.` from the LLM, or empty results from `verify`/`discover`.
 
-**Cause.** Python can't find a CA store. This happens almost always with **python.org Python on macOS**, which ships without certificates. It also happens on Windows with some university chains, and behind antivirus or corporate proxies that inspect HTTPS.
+**Cause.** Python cannot find a CA store. This occurs almost always with **python.org Python on macOS**, because that Python has no certificates. It also occurs on Windows with some university certificate chains. It also occurs behind antivirus software or company proxies that inspect HTTPS.
 
-**Fix, in order:**
-1. `pip install -U truststore certifi`. Agnostos then uses the OS trust store (Keychain, Windows CertStore or `/etc/ssl`).
-2. macOS python.org build: double-click `/Applications/Python 3.x/Install Certificates.command`.
-3. Linux: `sudo apt install --reinstall ca-certificates` (or your distro's equivalent).
-4. Behind a proxy or antivirus that inspects TLS, export its root CA and set:
+**Fix, in sequence:**
+1. Run `pip install -U truststore certifi`. Then Agnostos uses the trust store of the OS (Keychain, Windows CertStore or `/etc/ssl`).
+2. For the python.org build on macOS, double-click `/Applications/Python 3.x/Install Certificates.command`.
+3. On Linux, run `sudo apt install --reinstall ca-certificates` (or the equivalent command of your distribution).
+4. Behind a proxy or antivirus software that inspects TLS, export its root CA and set:
    `SSL_CERT_FILE=/path/to/root.pem` (Windows: `$env:SSL_CERT_FILE="C:\path\root.pem"`)
-5. Re-run `python -m outreach.cli tls-check`.
+5. Run `python -m outreach.cli tls-check` again.
 
-Never "fix" this by turning verification off.
+Do not turn off verification to "fix" this problem.
 
 ---
 
@@ -60,25 +60,25 @@ Never "fix" this by turning verification off.
 
 | Error | Meaning | Fix |
 |---|---|---|
-| `SMTPAuthenticationError` (535) | Login rejected | Use an **app password** (Gmail/iCloud), not your normal password. Check `SMTP_USER` is the full address |
-| `SMTPSenderRefused` | From address not allowed | `SMTP_FROM` must equal the mailbox in `SMTP_USER` |
-| `SMTPServerDisconnected: Connection unexpectedly closed` / `read operation timed out` | The server dropped the session. University relays drop idle sessions after about 2 minutes | Agnostos reconnects before each email and retries the connection 3 times. If it persists: raise `SEND_DELAY_MIN`, lower `DAILY_SEND_CAP`, and wait an hour, because you may be temporarily rate-limited |
-| `SMTPConnectError` / `TimeoutError` on connect | Can't reach host:port | Check `SMTP_HOST`/`SMTP_PORT`/`SMTP_SECURITY` (465 uses `ssl`, 587 uses `starttls`). Some networks and VPS providers block SMTP ports, so try another network |
-| `SMTPRecipientsRefused` | Bad recipient address | Run `verify --repair --apply` on that row |
-| `SMTPDataError` (550/554) | Message rejected, often as spam | Shorten the draft, remove links, send fewer per day |
-| `! Stopped: 3 consecutive SMTP failures` | Safety stop | The rest stay unsent and safe. Fix the cause above and re-run |
-| `skipped: invalid address` | `verify` marked it undeliverable | `verify --repair --apply`, or `--allow-unverified` if you're sure |
-| `held ... outside local window` | It's outside 9-17 for that professor | Expected. Re-run later or add `--wait` |
-| `is open in Excel (or otherwise locked)` | Workbook locked | Close Excel. If a sidecar `.pending-status.json` exists, it is merged automatically |
+| `SMTPAuthenticationError` (535) | The server rejected the login | Use an **app password** (Gmail/iCloud), not your usual password. Make sure that `SMTP_USER` is the full address |
+| `SMTPSenderRefused` | The server does not accept the From address | `SMTP_FROM` must be the same as the mailbox in `SMTP_USER` |
+| `SMTPServerDisconnected: Connection unexpectedly closed` / `read operation timed out` | The server closed the session. University relays close idle sessions after about 2 minutes | Agnostos connects again before each email, and tries the connection 3 times. If the problem continues: increase `SEND_DELAY_MIN`, decrease `DAILY_SEND_CAP`, and wait one hour. The server possibly applies a temporary rate limit |
+| `SMTPConnectError` / `TimeoutError` on connect | The tool cannot connect to host:port | Check `SMTP_HOST`/`SMTP_PORT`/`SMTP_SECURITY` (465 uses `ssl`, 587 uses `starttls`). Some networks and VPS providers block SMTP ports. Try a different network |
+| `SMTPRecipientsRefused` | Incorrect recipient address | Run `verify --repair --apply` on that row |
+| `SMTPDataError` (550/554) | The server rejected the message, frequently as spam | Make the draft shorter, remove links, and send fewer emails each day |
+| `! Stopped: 3 consecutive SMTP failures` | Safety stop | The remaining rows stay unsent and safe. Fix the cause above and run the command again |
+| `skipped: invalid address` | `verify` marked the address as undeliverable | Run `verify --repair --apply`. If you are sure that the address is correct, use `--allow-unverified` |
+| `held ... outside local window` | The time is outside 9-17 for that professor | This is correct behaviour. Run the command again later, or add `--wait` |
+| `is open in Excel (or otherwise locked)` | The workbook is locked | Close Excel. If a sidecar `.pending-status.json` file exists, the tool merges it automatically |
 
-**Is my account flagged?** Check these signs:
-- Your own sent copies arrive in your inbox fine, but professors say they got nothing: you're probably landing in spam.
-- Many `bounced` rows in `check-replies` with "rejected" or "blocked" wording.
-- Login suddenly fails after many sends.
+**Does the provider flag my account?** Look for these signs:
+- Your own sent copies arrive in your inbox correctly, but professors say that they got nothing. Your emails probably go to spam.
+- `check-replies` shows many `bounced` rows with the words "rejected" or "blocked".
+- The login fails suddenly after many sends.
 
-If you see these, stop for 24-48 hours, then resume at 20-30 per day.
+If you see these signs, stop for 24-48 hours. Then start again at 20-30 emails each day.
 
-**Test SMTP without emailing anyone:**
+**Test SMTP without an email to a professor:**
 ```bash
 python -m outreach.cli send --review --top 1     # sends one draft to YOU
 ```
@@ -89,10 +89,10 @@ python -m outreach.cli send --review --top 1     # sends one draft to YOU
 
 | Error | Fix |
 |---|---|
-| `IMAP failed: ... AUTHENTICATIONFAILED` | Set `IMAP_USER`/`IMAP_PASSWORD`, which default to the SMTP ones. Gmail needs IMAP enabled in settings and an app password |
-| `IMAP failed: ... getaddrinfo failed` | `IMAP_HOST` is wrong. It defaults to `imap.<smtp domain>`, so set it explicitly |
-| Replies exist but aren't detected | They may be in a folder that isn't scanned. Set `IMAP_FOLDERS=INBOX;Spam;Junk;<folder>` |
-| `replies` finds threads but no "student" messages | Your server doesn't keep a Sent copy. That's fine, because the original email is taken from the workbook |
+| `IMAP failed: ... AUTHENTICATIONFAILED` | Set `IMAP_USER`/`IMAP_PASSWORD`. By default, they are the same as the SMTP values. For Gmail, enable IMAP in the settings and use an app password |
+| `IMAP failed: ... getaddrinfo failed` | `IMAP_HOST` is incorrect. Its default is `imap.<smtp domain>`. Set it explicitly |
+| Replies exist, but the tool does not find them | They are possibly in a folder that the tool does not scan. Set `IMAP_FOLDERS=INBOX;Spam;Junk;<folder>` |
+| `replies` finds threads but no "student" messages | Your server does not keep a Sent copy. This is not a problem, because the tool gets the original email from the workbook |
 
 ---
 
@@ -100,14 +100,14 @@ python -m outreach.cli send --review --top 1     # sends one draft to YOU
 
 | Error / symptom | Fix |
 |---|---|
-| `~ endpoint rejected structured outputs ... retrying without it` | Normal. The endpoint doesn't support that feature and Agnostos adapts |
-| `response truncated; raise MAX_OUTPUT_TOKENS` | Reasoning models (gpt-5, o-series) use hidden tokens. Agnostos now raises the budget automatically. For other models, set `MAX_OUTPUT_TOKENS=3000` |
-| `Three consecutive failures; aborting to avoid wasted spend` | Look at the `LLM Status` column for the real error, then re-run `run` |
-| `AuthenticationError` / 401 | Wrong or expired API key |
-| `NotFoundError` / model not found | Check `DRAFT_MODEL` against `python -m outreach.cli models` |
-| `RateLimitError` / 429 | Groq free tier limit. Wait a minute, lower `--max-professors`, or switch provider |
+| `~ endpoint rejected structured outputs ... retrying without it` | This is usual. The endpoint does not support that function, and Agnostos adapts |
+| `response truncated; raise MAX_OUTPUT_TOKENS` | Reasoning models (gpt-5, o-series) use hidden tokens. Agnostos now increases the budget automatically. For other models, set `MAX_OUTPUT_TOKENS=3000` |
+| `Three consecutive failures; aborting to avoid wasted spend` | Look at the `LLM Status` column for the real error. Then run `run` again |
+| `AuthenticationError` / 401 | The API key is incorrect or expired |
+| `NotFoundError` / model not found | Compare `DRAFT_MODEL` with the output of `python -m outreach.cli models` |
+| `RateLimitError` / 429 | Limit of the Groq free tier. Wait one minute, decrease `--max-professors`, or change the provider |
 | `Set DRAFT_MODEL in .env` | Add `DRAFT_MODEL=...` |
-| Drafts sound robotic | Keep `HUMANIZE_REWRITE=true` and lower `HUMANIZE_THRESHOLD` |
+| Drafts sound like a machine | Keep `HUMANIZE_REWRITE=true` and decrease `HUMANIZE_THRESHOLD` |
 
 ---
 
@@ -116,22 +116,22 @@ python -m outreach.cli send --review --top 1     # sends one draft to YOU
 | Symptom | Fix |
 |---|---|
 | `OpenAlex rate limit hit` | Set `OPENALEX_MAILTO=you@...` (polite pool), or get a free `OPENALEX_API_KEY` |
-| Many `invalid` / `no address on this row` | `verify --repair --apply --workers 6`. Some professors don't publish an address, and those are left blank on purpose |
-| `discover` finds too few | Broaden `--query` topics, widen `--countries`, lower `--min-h-index` |
-| `verify` very slow | Lower `--workers` if you get blocked, or raise it if your network is fast |
+| Many `invalid` / `no address on this row` | Run `verify --repair --apply --workers 6`. Some professors do not publish an address. The tool intentionally keeps those cells blank |
+| `discover` finds too few persons | Use wider `--query` topics and more `--countries`, and decrease `--min-h-index` |
+| `verify` is too slow | If sites block you, decrease `--workers`. If your network is fast, increase it |
 
 ---
 
 ## 7. Interruptions (sleep, crash, power cut)
 
-Nothing that was sent is ever lost or re-sent.
+The tool never loses or sends again an email that it sent.
 
-1. Check whether a send is still running:
+1. Find out if a send is still active:
    - Windows: `Get-CimInstance Win32_Process -Filter "Name='python.exe'" | ? CommandLine -match "send --live"`
    - macOS/Linux: `pgrep -af "outreach.cli send"`
-2. Check what happened: `tail -n 40 output/daily_send.log` (Windows: `Get-Content output\daily_send.log -Tail 40`)
+2. Find out what occurred: `tail -n 40 output/daily_send.log` (Windows: `Get-Content output\daily_send.log -Tail 40`)
 3. Check the counts: `python -m outreach.cli stats`
-4. If nothing is running and rows are still unsent, re-run the same `send --live ...` command. It continues from where it stopped.
+4. If no send is active and some rows are still unsent, run the same `send --live ...` command again. It continues from the point where it stopped.
 
 Windows sleep and wake history: `Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Microsoft-Windows-Kernel-Power','Microsoft-Windows-Power-Troubleshooter'} -MaxEvents 20`
 macOS: `pmset -g log | grep -E "Sleep|Wake" | tail -20` · Linux: `journalctl -b -u systemd-suspend`
@@ -143,19 +143,19 @@ macOS: `pmset -g log | grep -E "Sleep|Wake" | tail -20` · Linux: `journalctl -b
 | Symptom | Fix |
 |---|---|
 | `PermissionError` / `is open in Excel` | Close Excel or LibreOffice |
-| Columns not recognised | Headers must include a name column and an email column. See README "header mapping" |
-| Something got overwritten | Restore from `output/professors.backup-YYYYMMDD-HHMMSS.xlsx` |
-| Statuses "missing" after a run | Look for `professors.xlsx.pending-status.json`. It is merged on the next run, or run `stats` (which already counts it) |
+| The tool does not recognise the columns | The headers must include a name column and an email column. See "header mapping" in the README |
+| The tool overwrote data | Restore the data from `output/professors.backup-YYYYMMDD-HHMMSS.xlsx` |
+| Statuses are "missing" after a run | Look for `professors.xlsx.pending-status.json`. The tool merges it on the next run. Alternatively, run `stats` (it already counts that file) |
 
 ---
 
 ## 9. Reporting a bug
 
-Include:
-1. Your OS and `python --version`
-2. The exact command you ran
-3. The full error output, with **emails, keys and passwords redacted**
+Include these items:
+1. Your OS and the output of `python --version`
+2. The exact command that you ran
+3. The full error output, with **emails, keys and passwords removed**
 4. The output of `python -m outreach.cli tls-check` and `python -m outreach.cli stats`
-5. The last 40 lines of `output/daily_send.log`, if it was a scheduled send
+5. The last 40 lines of `output/daily_send.log`, if the problem occurred during a scheduled send
 
 Open an issue at https://github.com/Avinashistoocool/Agnostos-v2/issues.

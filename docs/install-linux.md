@@ -2,7 +2,7 @@
 
 See also: [FAQ](faq.md) · [Diagnostics](diagnostics.md)
 
-This guide covers setup and daily use on Ubuntu/Debian, Fedora and Arch, as a desktop or a headless server. It runs Agnostos as a local command-line tool.
+This guide tells you how to set up and use Agnostos each day on Ubuntu/Debian, Fedora and Arch. It applies to a desktop or a headless server. Agnostos runs as a local command-line tool.
 
 ---
 
@@ -19,7 +19,7 @@ sudo dnf install -y python3 python3-pip git ca-certificates
 sudo pacman -S --needed python python-pip git ca-certificates
 ```
 
-Python 3.10 or newer is required. Check with `python3 --version`.
+Agnostos requires Python 3.10 or newer. To check the version, run `python3 --version`.
 
 ## 2. Get the code
 
@@ -69,7 +69,7 @@ SEND_DELAY_MAX=600
 SEND_LOCAL_WINDOW=9-17
 ```
 
-> Many cloud VPS providers block outbound port 25, and some block 465 and 587 on new accounts. Run `python -m outreach.cli tls-check` to confirm SMTP is reachable.
+> Many cloud VPS providers block outbound port 25. Some providers also block 465 and 587 on new accounts. To make sure that the tool can connect to SMTP, run `python -m outreach.cli tls-check`.
 
 ## 5. Check the setup
 
@@ -87,16 +87,16 @@ python -m outreach.cli tls-check
 | Fix emails | `python -m outreach.cli verify --repair --apply` |
 | Score and draft | `python -m outreach.cli run --mode list --max-professors 300` |
 | Preview (sends nothing) | `python -m outreach.cli send --dry-run` |
-| Review copies to yourself | `python -m outreach.cli send --review --top 3` |
-| Send for real, paced | `python -m outreach.cli send --live --limit 40 --local-window 9-17 --wait` |
+| Review copies to you | `python -m outreach.cli send --review --top 3` |
+| Send for real, at intervals | `python -m outreach.cli send --live --limit 40 --local-window 9-17 --wait` |
 | Progress | `python -m outreach.cli stats` |
-| Detect replies and bounces | `python -m outreach.cli check-replies` |
-| Draft follow-ups | `python -m outreach.cli replies` |
+| Find replies and bounces | `python -m outreach.cli check-replies` |
+| Write follow-up drafts | `python -m outreach.cli replies` |
 | Send approved follow-ups | `python -m outreach.cli replies --send --live` |
 
-The workbook is an `.xlsx`. You can open it in LibreOffice Calc, but close it before a live send. Already-sent rows are never re-sent unless you pass `--resend`.
+The workbook is an `.xlsx` file. You can open it in LibreOffice Calc, but close it before a live send. The tool never sends again to rows that have the status sent, unless you use `--resend`.
 
-## 7. Send automatically every weekday
+## 7. Send automatically each weekday
 
 ### Option A: systemd user timer (recommended)
 
@@ -137,7 +137,7 @@ systemctl --user start agnostos-send        # run now
 journalctl --user -u agnostos-send -f       # or: tail -f output/daily_send.log
 ```
 
-`systemd-inhibit` stops the machine from sleeping while the send runs. `Persistent=true` catches up on a run that was missed while the machine was off.
+`systemd-inhibit` prevents sleep of the machine while the send is active. With `Persistent=true`, the timer does a run that it missed while the machine was off.
 
 ### Option B: cron
 
@@ -148,17 +148,17 @@ crontab -e
 30 12 * * 1-5 cd $HOME/Agnostos-v2 && PYTHONIOENCODING=utf-8 .venv/bin/python -u -m outreach.cli send --live --yes --limit 40 --local-window 9-17 --wait >> output/daily_send.log 2>&1
 ```
 
-Cron uses the system timezone. Check it with `timedatectl`.
+Cron uses the time zone of the system. To check it, run `timedatectl`.
 
 ## 8. Keep the machine awake (laptops)
 
-- Use `systemd-inhibit` as in Option A, or prefix a manual run:
+- Use `systemd-inhibit` as in Option A, or put it before the command of a manual run:
   `systemd-inhibit --what=sleep:idle python -m outreach.cli send --live ...`
-- To keep running with the lid closed on power, set `HandleLidSwitchExternalPower=ignore` in `/etc/systemd/logind.conf`, then run `sudo systemctl restart systemd-logind`.
-- On a headless server, run long manual jobs inside `tmux` so they survive SSH disconnects:
+- To keep the machine on with the lid closed and the power connected, set `HandleLidSwitchExternalPower=ignore` in `/etc/systemd/logind.conf`. Then run `sudo systemctl restart systemd-logind`.
+- On a headless server, run long manual jobs in `tmux`, so that they continue after an SSH disconnection:
   `tmux new -s agnostos` â†’ run the command â†’ `Ctrl+B D` to detach â†’ `tmux attach -t agnostos` to return.
 
-If the machine sleeps anyway, nothing is lost. Each sent email is saved immediately, and the waits use the wall clock.
+If the machine goes to sleep, no data is lost. The tool saves each sent email immediately, and the waits use the wall clock.
 
 ## 9. Monitor remotely (optional)
 
@@ -166,7 +166,7 @@ If the machine sleeps anyway, nothing is lost. Each sent email is saved immediat
 curl -fsSL https://tailscale.com/install.sh | sh
 sudo tailscale up --ssh            # Tailscale SSH, no sshd config needed
 ```
-From another device:
+From a different device:
 ```bash
 ssh <you>@<machine-name>
 cd ~/Agnostos-v2 && source .venv/bin/activate
@@ -178,10 +178,10 @@ tail -f output/daily_send.log
 
 | Symptom | Fix |
 |---|---|
-| `CERTIFICATE_VERIFY_FAILED` | `sudo apt install --reinstall ca-certificates` (or your distro's equivalent), then `pip install -U truststore certifi` and `python -m outreach.cli tls-check`. For a custom CA: `export SSL_CERT_FILE=/path/root.pem` |
-| `error: externally-managed-environment` | You're outside the venv. Run `source .venv/bin/activate` |
+| `CERTIFICATE_VERIFY_FAILED` | Run `sudo apt install --reinstall ca-certificates` (or the equivalent command of your distribution). Then run `pip install -U truststore certifi` and `python -m outreach.cli tls-check`. For a custom CA: `export SSL_CERT_FILE=/path/root.pem` |
+| `error: externally-managed-environment` | You are not in the venv. Run `source .venv/bin/activate` |
 | `No module named venv` | `sudo apt install python3-venv` |
-| `SMTPConnectError` / timeout on a VPS | Your provider blocks SMTP. Ask them to unblock it, or use a different port or host |
+| `SMTPConnectError` / timeout on a VPS | Your provider blocks SMTP. Ask the provider to unblock it, or use a different port or host |
 | `SMTPAuthenticationError` | Use an app password. Check `SMTP_USER` |
-| Timer didn't fire | `systemctl --user list-timers`. On servers, make sure `loginctl enable-linger` was run |
-| Few emails sent | `python -m outreach.cli stats` explains why rows were skipped |
+| The timer did not start | `systemctl --user list-timers`. On servers, make sure that you ran `loginctl enable-linger` |
+| The tool sent few emails | `python -m outreach.cli stats` gives the reasons for skipped rows |

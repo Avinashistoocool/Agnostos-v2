@@ -2,7 +2,7 @@
 
 See also: [FAQ](faq.md) · [Diagnostics](diagnostics.md)
 
-This guide covers setup and daily use on macOS 12 or later, on Apple Silicon or Intel. It runs Agnostos as a local command-line tool.
+This guide tells you how to set up and use Agnostos each day on macOS 12 or later, on Apple Silicon or Intel. Agnostos runs as a local command-line tool.
 
 ---
 
@@ -15,10 +15,10 @@ brew install python@3.12 git
 python3 --version
 ```
 
-> **If you use the python.org installer instead:** it ships **without any SSL certificates**. Every connection then fails with
+> **If you use the python.org installer:** that Python has **no SSL certificates**. Thus, each connection fails with
 > `[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:...)`.
-> Fix it once by double-clicking `/Applications/Python 3.x/Install Certificates.command`.
-> Agnostos also installs `truststore`, so it reads the macOS Keychain directly. See Troubleshooting.
+> To fix this one time, double-click `/Applications/Python 3.x/Install Certificates.command`.
+> Agnostos also installs `truststore`, so that it reads the macOS Keychain directly. See Troubleshooting.
 
 ## 2. Get the code
 
@@ -37,7 +37,7 @@ python -m pip install -U pip
 pip install -r requirements.txt
 ```
 
-Run `source .venv/bin/activate` in every new terminal before using `python -m outreach.cli ...`.
+In each new terminal, run `source .venv/bin/activate` before you use `python -m outreach.cli ...`.
 
 ## 4. Configure `.env`
 
@@ -46,7 +46,7 @@ cp .env.example .env
 open -e .env          # or: nano .env
 ```
 
-Fill in **section 1** at minimum. Use full macOS paths:
+Fill in **section 1** as a minimum. Use full macOS paths:
 
 ```ini
 RESUME_PATH=/Users/<you>/Documents/CV.pdf
@@ -71,7 +71,7 @@ SEND_DELAY_MAX=600
 SEND_LOCAL_WINDOW=9-17
 ```
 
-> **Gmail / iCloud:** use an app password. For Gmail, create one at https://myaccount.google.com/apppasswords. For iCloud, go to appleid.apple.com â†’ Sign-In and Security â†’ App-Specific Passwords. iCloud SMTP is `smtp.mail.me.com` on port 587 with `starttls`.
+> **Gmail / iCloud:** use an app password. For Gmail, make one at https://myaccount.google.com/apppasswords. For iCloud, go to appleid.apple.com â†’ Sign-In and Security â†’ App-Specific Passwords. iCloud SMTP is `smtp.mail.me.com` on port 587 with `starttls`.
 
 ## 5. Check the setup
 
@@ -89,18 +89,18 @@ python -m outreach.cli tls-check     # must show "ok" for every host
 | Fix emails | `python -m outreach.cli verify --repair --apply` |
 | Score and draft | `python -m outreach.cli run --mode list --max-professors 300` |
 | Preview (sends nothing) | `python -m outreach.cli send --dry-run` |
-| Review copies to yourself | `python -m outreach.cli send --review --top 3` |
-| Send for real, paced | `python -m outreach.cli send --live --limit 40 --local-window 9-17 --wait` |
+| Review copies to you | `python -m outreach.cli send --review --top 3` |
+| Send for real, at intervals | `python -m outreach.cli send --live --limit 40 --local-window 9-17 --wait` |
 | Progress | `python -m outreach.cli stats` |
-| Detect replies and bounces | `python -m outreach.cli check-replies` |
-| Draft follow-ups from full threads | `python -m outreach.cli replies` |
+| Find replies and bounces | `python -m outreach.cli check-replies` |
+| Write follow-up drafts from full threads | `python -m outreach.cli replies` |
 | Send approved follow-ups | `python -m outreach.cli replies --send --live` |
 
-Close the workbook in Excel or Numbers before a live send. Already-sent rows are never mailed again unless you pass `--resend`.
+Close the workbook in Excel or Numbers before a live send. The tool never sends again to rows that have the status sent, unless you use `--resend`.
 
-## 7. Send automatically every weekday (launchd)
+## 7. Send automatically each weekday (launchd)
 
-Create `~/Library/LaunchAgents/com.agnostos.send.plist`. Replace `<you>` with your username:
+Make the file `~/Library/LaunchAgents/com.agnostos.send.plist`. Replace `<you>` with your username:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -128,7 +128,7 @@ Create `~/Library/LaunchAgents/com.agnostos.send.plist`. Replace `<you>` with yo
 </dict></plist>
 ```
 
-Load it and manage it:
+Load the file and manage the job:
 ```bash
 launchctl load  ~/Library/LaunchAgents/com.agnostos.send.plist
 launchctl start com.agnostos.send                     # run now
@@ -136,21 +136,21 @@ tail -f output/daily_send.log                         # live log
 launchctl unload ~/Library/LaunchAgents/com.agnostos.send.plist   # stop
 ```
 
-The `caffeinate -i` wrapper keeps the Mac from idle-sleeping while a send is running.
+The `caffeinate -i` wrapper prevents idle sleep of the Mac while a send is active.
 
-> If you keep the repo in `~/Desktop` or `~/Documents`, open **System Settings â†’ Privacy & Security â†’ Full Disk Access** and add `/usr/bin/caffeinate` and the venv's `python`. Without this, launchd can be blocked from reading those folders.
+> If the repository is in `~/Desktop` or `~/Documents`, open **System Settings â†’ Privacy & Security â†’ Full Disk Access**. Add `/usr/bin/caffeinate` and the `python` of the venv. Without this step, macOS can prevent launchd from reading those folders.
 
 ## 8. Keep the Mac awake
 
-- During a manual run, start the command with `caffeinate -i`:
+- For a manual run, start the command with `caffeinate -i`:
   `caffeinate -i python -m outreach.cli send --live --limit 40 --local-window 9-17 --wait`
-- **Closing the lid sleeps the Mac anyway** unless it is on power with an external display attached (clamshell mode). Alternatively, run `sudo pmset -a disablesleep 1` and undo it later with `sudo pmset -a disablesleep 0`.
+- **When you close the lid, the Mac goes to sleep**, unless it has power and an external display (clamshell mode). Alternatively, run `sudo pmset -a disablesleep 1`. Later, undo it with `sudo pmset -a disablesleep 0`.
 
-If the Mac sleeps mid-run, nothing is lost. Each sent email is saved immediately, and the wait timers use the wall clock, so they resume correctly after wake.
+If the Mac goes to sleep during a run, no data is lost. The tool saves each sent email immediately. The wait timers use the wall clock, thus they continue correctly after the Mac wakes.
 
 ## 9. Monitor remotely (optional)
 
-Turn on **System Settings â†’ General â†’ Sharing â†’ Remote Login**. Install Tailscale, then connect from another device:
+Turn on **System Settings â†’ General â†’ Sharing â†’ Remote Login**. Install Tailscale. Then connect from a different device:
 ```bash
 ssh <you>@<tailscale-ip>
 cd ~/Desktop/Agnostos-v2 && source .venv/bin/activate
@@ -162,10 +162,10 @@ tail -f output/daily_send.log
 
 | Symptom | Fix |
 |---|---|
-| `CERTIFICATE_VERIFY_FAILED ... (_ssl.c:1144)` or similar | 1) `pip install -U truststore certifi` 2) run `Install Certificates.command` (python.org builds) 3) `python -m outreach.cli tls-check`. Behind a corporate proxy, `export SSL_CERT_FILE=/path/to/root.pem` |
+| `CERTIFICATE_VERIFY_FAILED ... (_ssl.c:1144)` or a similar error | 1) `pip install -U truststore certifi` 2) run `Install Certificates.command` (python.org builds) 3) `python -m outreach.cli tls-check`. Behind a company proxy, `export SSL_CERT_FILE=/path/to/root.pem` |
 | `SMTPAuthenticationError` | Use an app password. Check `SMTP_USER` |
-| `SMTPServerDisconnected` | Reconnects automatically. If it persists, raise `SEND_DELAY_MIN` and lower `DAILY_SEND_CAP` |
+| `SMTPServerDisconnected` | The tool connects again automatically. If the problem continues, increase `SEND_DELAY_MIN` and decrease `DAILY_SEND_CAP` |
 | `xcrun: error` during pip install | `xcode-select --install` |
 | `zsh: command not found: python` | Use `python3`, or activate the venv |
-| launchd job never runs | Check Full Disk Access (see section 7), then `launchctl list \| grep agnostos` |
-| Few emails sent | `python -m outreach.cli stats` explains why rows were skipped |
+| The launchd job never runs | Check Full Disk Access (see section 7), then `launchctl list \| grep agnostos` |
+| The tool sent few emails | `python -m outreach.cli stats` gives the reasons for skipped rows |

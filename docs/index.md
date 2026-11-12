@@ -1,17 +1,17 @@
 # Agnostos
 
-**Resume-driven outreach for research internships.** Agnostos is a free, open-source command-line tool
-that helps students find research internships:
+**Research internship outreach that starts from your resume.** Agnostos is a free, open-source command-line tool.
+It helps students find research internships:
 
-- **Who should I write to?** It ranks a professor list against your resume locally, for free, or builds
-  the list for you from a research topic using the OpenAlex paper index.
-- **What have they worked on lately?** It pulls each professor's recent first- and last-author papers.
-- **What do I say?** One language-model call per professor returns an acceptance estimate and a short,
-  specific, honest draft. Common AI tells are stripped out and unverifiable claims are flagged.
-- **Is the address right?** It checks every address and can find the one each professor publishes on
+- **To whom do I write?** The tool compares a list of professors with your resume locally, at no cost, and sorts the list.
+  It can also make the list for you from a research topic, with the OpenAlex paper index.
+- **On which subjects did they work recently?** The tool gets the recent papers where each professor is the first or last author.
+- **What do I write?** One language-model call for each professor gives an acceptance estimate and a short,
+  specific and honest draft. The tool removes the usual signs of AI text, and it flags claims that it cannot verify.
+- **Is the address correct?** The tool checks each address. It can find the address that each professor publishes on
   their own page.
-- **When do I send it?** Slowly, from your own inbox, during each professor's working hours.
-- **Did they answer?** It tracks replies, auto-replies and bounces, and drafts follow-ups for you to approve.
+- **When do I send it?** Slowly, from your own inbox, during the working hours of each professor.
+- **Did they answer?** The tool records replies, auto-replies and bounces. It writes follow-up drafts for your approval.
 
 ## Get it
 
@@ -36,12 +36,12 @@ The full command reference is in the
 | | |
 |---|---|
 | Setup: [Windows](install-windows.md) · [macOS](install-macos.md) · [Linux](install-linux.md) | Step-by-step installation and daily use for each operating system |
-| [FAQ](faq.md) | Common questions about costs, sending, replies and safety |
-| [Diagnostics](diagnostics.md) | Health checks and fixes for every common error message |
-| [Google Calendar](calendar.md) | One-time setup for meeting-slot checks and calendar holds |
-| [Technical report (PDF)](Agnostos_Technical_Report.pdf) | Architecture and every scoring rule: matcher, discovery ranking, cost estimate, AI-tell score, address confidence, scheduling |
+| [FAQ](faq.md) | Frequent questions about costs, sending, replies and safety |
+| [Diagnostics](diagnostics.md) | Health checks, and solutions for each frequent error message |
+| [Google Calendar](calendar.md) | One-time setup for the check of meeting slots and for calendar holds |
+| [Technical report (PDF)](Agnostos_Technical_Report.pdf) | Architecture and each scoring rule: matcher, discovery ranking, cost estimate, AI-tell score, address confidence, schedules |
 
 !!! note
-    Agnostos drafts; you decide. Nothing is sent without `--live`, and every draft is written to your
-    spreadsheet first so you can read and edit it. The acceptance percentage is a model's estimate for
-    ordering your list, not a statistical probability.
+    Agnostos writes drafts, and you make the decision. The tool sends nothing without `--live`. It writes each draft
+    to your spreadsheet first, so that you can read and edit it. The acceptance percentage is an estimate of a model.
+    It is for the sequence of your list. It is not a statistical probability.

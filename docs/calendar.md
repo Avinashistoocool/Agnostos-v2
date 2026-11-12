@@ -1,28 +1,29 @@
 # Google Calendar setup
 
-Agnostos uses Google Calendar for two things when it sends meeting requests (see [Funding follow-ups and meeting requests](https://github.com/Avinashistoocool/Agnostos-v2#funding-follow-ups-and-meeting-requests)):
+Agnostos uses Google Calendar for two tasks when it sends meeting requests (see [Funding follow-ups and meeting requests](https://github.com/Avinashistoocool/Agnostos-v2#funding-follow-ups-and-meeting-requests)):
 
-- **Choosing slots.** It never proposes a time when you're already busy.
-- **Holding slots.** When a reply goes out, each proposed time is added to your calendar as a tentative **HOLD: call with &lt;professor&gt;** event.
+- **Selection of slots.** The tool never proposes a time when you are busy.
+- **Hold of slots.** When a reply goes out, the tool adds each proposed time to your calendar as a tentative **HOLD: call with &lt;professor&gt;** event.
 
-The setup is optional. Without it, meeting requests still go out; only the busy check and the holds are skipped.
+The setup is optional. Without it, meeting requests still go out. The tool skips only the busy check and the holds.
 
-It takes about 5 minutes and is done once.
+The setup takes about 5 minutes, and you do it one time.
 
 ---
 
-## 1. Use the right Google account
+## 1. Use the correct Google account
 
-Do every step while signed in to the **personal Gmail whose calendar you want the holds on**. Check the avatar in the top-right of the Cloud Console.
+Do all the steps while you are signed in to the **personal Gmail account whose calendar must get the holds**. Look at the avatar in the top-right corner of the Cloud Console.
 
-> **Most common failure: `Error 403: org_internal`.** "Access blocked: &lt;app&gt; can only be used within its organization" means the Cloud project belongs to a Google Workspace organisation (a university or company account, or an org you created) and the app's audience is **Internal**. A personal Gmail can't sign in to an Internal app. Fix it in step 4 by making it **External**, or create the project with **Location: No organization**.
+> **Most frequent failure: `Error 403: org_internal`.** The message is "Access blocked: &lt;app&gt; can only be used within its organization". It means that the Cloud project is part of a Google Workspace organisation, and the audience of the app is **Internal**. Such an organisation is a university or company account, or an organisation that you made. A personal Gmail account cannot sign in to an Internal app. To fix this, set the audience to **External** in step 4. Alternatively, make the project with **Location: No organization**.
 
 ## 2. Create a project
 
 1. Open <https://console.cloud.google.com/projectcreate>.
-2. Give it any name, e.g. `agnostos`.
-3. Set **Location / Organization** to **No organization** if you can.
-4. Click **Create**, then make sure the new project is selected in the top bar.
+2. Give the project a name, for example `agnostos`.
+3. If possible, set **Location / Organization** to **No organization**.
+4. Click **Create**.
+5. Make sure that the top bar shows the new project.
 
 ## 3. Enable the Calendar API
 
@@ -31,25 +32,25 @@ Open <https://console.cloud.google.com/apis/library/calendar-json.googleapis.com
 ## 4. Configure the consent screen (Google Auth Platform)
 
 1. Open <https://console.cloud.google.com/auth/overview> and click **Get started**.
-2. **App name:** anything (e.g. `Agnostos`). **Support email:** your Gmail.
-3. **Audience:** choose **External**.
-4. **Contact information:** your Gmail. Accept the policy and click **Create**.
+2. **App name:** any name (for example, `Agnostos`). **Support email:** your Gmail address.
+3. **Audience:** select **External**.
+4. **Contact information:** your Gmail address. Accept the policy and click **Create**.
 5. Open <https://console.cloud.google.com/auth/audience>:
-   - **User type** must read **External**. If it says Internal, click **Make external** and choose **Testing**, then **Confirm**.
-   - Under **Test users**, click **Add users**, add the Gmail you'll sign in with, then **Save**.
+   - **User type** must show **External**. If it shows Internal, click **Make external**, select **Testing**, then click **Confirm**.
+   - Under **Test users**, click **Add users**. Add the Gmail address that you will use to sign in, then click **Save**.
 
-"Testing" needs no review by Google. Only the test users you list can sign in, which is exactly what you want.
+Google does not review apps in "Testing" mode. Only the test users that you list can sign in. This is the correct configuration for this tool.
 
 ## 5. Create a Desktop OAuth client
 
 1. Open <https://console.cloud.google.com/auth/clients> and click **Create client**.
-2. **Application type:** **Desktop app**. **Name:** anything.
-3. Click **Create**, then **Download JSON**.
-4. Save the file as `credentials.json` in the repo root, next to `README.md`, replacing any old one. Or set `GOOGLE_CLIENT_SECRET=path\to\file.json` in `.env`.
+2. **Application type:** **Desktop app**. **Name:** any name.
+3. Click **Create**, then click **Download JSON**.
+4. Save the file as `credentials.json` in the root of the repository, next to `README.md`. Replace an old file if there is one. Alternatively, set `GOOGLE_CLIENT_SECRET=path\to\file.json` in `.env`.
 
-`credentials.json` and the token are git-ignored. Never commit them.
+Git ignores `credentials.json` and the token. Never commit them.
 
-## 6. Sign in once
+## 6. Sign in one time
 
 ```bash
 python -m outreach.cli calendar-auth
@@ -57,23 +58,23 @@ python -m outreach.cli calendar-auth
 
 A browser opens:
 
-1. Pick your Gmail.
-2. You'll see **"Google hasn't verified this app"**. Click **Continue**; it's your own app.
-3. Allow access to Google Calendar.
+1. Select your Gmail account.
+2. You see **"Google hasn't verified this app"**. Click **Continue**, because it is your own app.
+3. Give access to Google Calendar.
 
-The terminal then prints `Authorised. Calendar: <your email> (<timezone>)`. The token is saved to `output/gcal_token.json` and refreshes itself, so you won't be asked again.
+Then the terminal shows `Authorised. Calendar: <your email> (<timezone>)`. The tool saves the token to `output/gcal_token.json`, and the token refreshes itself. Thus, the tool does not ask you again.
 
 ## 7. Settings (`.env`)
 
 | Key | Default | Meaning |
 |---|---|---|
 | `GOOGLE_CLIENT_SECRET` | `credentials.json` | Path to the OAuth client JSON |
-| `GOOGLE_CALENDAR_ID` | `primary` | Calendar to check and write holds to |
-| `MEET_MINUTES` | `20` | Call length |
-| `MEET_LEAD_DAYS` | `2` | Earliest slot is this many days out |
-| `MEET_THEIR_HOURS` | `9-17` | Professor's local hours a slot must fit in |
-| `MEET_MY_HOURS` | `13-23` | Your hours (in `MEET_MY_TZ`) a slot must fit in |
-| `MEET_MY_TZ` | `Asia/Kolkata` | Your timezone |
+| `GOOGLE_CALENDAR_ID` | `primary` | Calendar that the tool checks and that gets the holds |
+| `MEET_MINUTES` | `20` | Length of the call |
+| `MEET_LEAD_DAYS` | `2` | The first slot is this number of days in the future |
+| `MEET_THEIR_HOURS` | `9-17` | Local hours of the professor that must contain the slot |
+| `MEET_MY_HOURS` | `13-23` | Your hours (in `MEET_MY_TZ`) that must contain the slot |
+| `MEET_MY_TZ` | `Asia/Kolkata` | Your time zone |
 | `MEET_LINK` | — | Optional fixed Meet/Zoom link to include |
 
 ## Switching accounts
@@ -81,16 +82,16 @@ The terminal then prints `Authorised. Calendar: <your email> (<timezone>)`. The 
 To put holds on a different Google account:
 
 1. Delete `output/gcal_token.json`.
-2. If the new account isn't a test user, add it in step 4. If it's in a different project, also replace `credentials.json`.
+2. If the new account is not a test user, add it in step 4. If it is in a different project, also replace `credentials.json`.
 3. Run `python -m outreach.cli calendar-auth` again.
 
 ## Troubleshooting
 
 | Symptom | Cause / fix |
 |---|---|
-| `Error 403: org_internal` | App audience is Internal. Go to [Audience](https://console.cloud.google.com/auth/audience), click **Make external**, choose **Testing**, and add yourself as a test user. Or use a project with *No organization*. |
-| `Error 403: access_denied` | The account you picked isn't a test user. Add it under **Test users**. |
-| `Google Calendar not authorised` | Run `calendar-auth`. The token is missing or was deleted. |
-| `OAuth client file not found` | Save the downloaded JSON as `credentials.json` in the repo root, or set `GOOGLE_CLIENT_SECRET`. |
-| `invalid_grant` on a later run | The token was revoked or expired (Testing-mode tokens can expire after 7 days). Delete `output/gcal_token.json` and run `calendar-auth` again. |
-| Holds land on the wrong calendar | You signed in with another account. See *Switching accounts*. |
+| `Error 403: org_internal` | The audience of the app is Internal. Go to [Audience](https://console.cloud.google.com/auth/audience), click **Make external**, select **Testing**, and add yourself as a test user. Alternatively, use a project with *No organization*. |
+| `Error 403: access_denied` | The account that you selected is not a test user. Add it under **Test users**. |
+| `Google Calendar not authorised` | The token is missing or deleted. Run `calendar-auth`. |
+| `OAuth client file not found` | Save the downloaded JSON as `credentials.json` in the root of the repository, or set `GOOGLE_CLIENT_SECRET`. |
+| `invalid_grant` on a subsequent run | The token was revoked or expired (tokens in Testing mode can expire after 7 days). Delete `output/gcal_token.json` and run `calendar-auth` again. |
+| The holds go on the wrong calendar | You signed in with a different account. See *Switching accounts*. |
