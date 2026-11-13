@@ -41,6 +41,12 @@ npm run tauri dev                                        # starts Vite on :1420 
 ## Release build
 
 ```powershell
+.\build-app.ps1                    # engine + Tauri release build with build-machine paths remapped
+```
+
+or step by step:
+
+```powershell
 .\build-engine.ps1                 # PyInstaller -> app\src-tauri\binaries\agnostos-engine-x86_64-pc-windows-msvc.exe
 cd app
 npm run tauri build                # runs `npm run build` (Vite -> app/dist), compiles Rust, bundles

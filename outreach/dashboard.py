@@ -15,7 +15,7 @@ from pathlib import Path
 
 from .config import settings
 
-LOGS = [("RESEND (Gmail)", "resend_run.log"), ("DAILY SEND (IITD)", "daily_send.log"),
+LOGS = [("RESEND (Gmail)", "resend_run.log"), ("DAILY SEND (main SMTP)", "daily_send.log"),
         ("REPLIES", "replies_run.log")]
 
 

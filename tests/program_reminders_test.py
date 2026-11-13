@@ -65,13 +65,20 @@ class Base(unittest.TestCase):
         shutil.rmtree(WORK, ignore_errors=True)
         WORK.mkdir()
         self.mails = []
-        self.cv_patch = patch.object(pr, "EXTERNAL_CV_DIR", WORK / "nocv")
+        self.cv_patch = patch.object(pr.settings, "program_cv_dir", str(WORK / "nocv"))
         self.cv_patch.start()
+        self.to_patch = patch.object(pr.settings, "reminder_recipients",
+                                     ["owner@example.org", "owner@uni.example.edu"])
+        self.to_patch.start()
+        self.tz_patch = patch.object(pr.settings, "reminder_tz", "Asia/Kolkata")
+        self.tz_patch.start()
         self.dir_patch = patch.object(pr, "programs_dir", lambda: WORK)
         self.dir_patch.start()
 
     def tearDown(self):
         self.cv_patch.stop()
+        self.to_patch.stop()
+        self.tz_patch.stop()
         self.dir_patch.stop()
         shutil.rmtree(WORK, ignore_errors=True)
 
@@ -213,7 +220,20 @@ class RunTest(Base):
     def test_recipient_guard(self):
         with self.assertRaises(ValueError):
             pr._guard(["someone@else.org"])
-        self.assertEqual(pr._guard(pr.RECIPIENTS), list(pr.RECIPIENTS))
+        self.assertEqual(pr._guard(pr.recipients()), list(pr.recipients()))
+        with patch.object(pr.settings, "reminder_recipients", []):
+            with self.assertRaises(RuntimeError):
+                pr._guard(["owner@example.org"])
+
+    def test_no_personal_defaults(self):
+        import inspect
+        src = inspect.getsource(pr)
+        for personal in ("gmail.com", "iitd", "+91", "C:\\Users"):
+            self.assertNotIn(personal, src)
+        with patch.object(pr.settings, "reminder_sms_to", ""), \
+                patch.dict("os.environ", {"TWILIO_ACCOUNT_SID": "a", "TWILIO_AUTH_TOKEN": "b",
+                                          "TWILIO_FROM": "c"}):
+            self.assertFalse(pr.sms_configured())
 
 
 class CalendarTest(Base):
@@ -260,6 +280,16 @@ class CliTest(Base):
         from outreach.cli import main
         self.assertEqual(main(["program-reminders", "--dry-run", "--now", "2026-11-08",
                                "--programs", str(WORK / "missing.json")]), 0)
+
+    def test_cli_live_disabled_without_recipients(self):
+        from outreach.cli import main
+        src = WORK / "p.json"
+        shutil.copy(FIXTURE, src)
+        with patch.object(pr.settings, "reminder_recipients", []), \
+                patch.object(pr, "GmailSender", side_effect=AssertionError("must not send")):
+            self.assertEqual(main(["program-reminders", "--now", "2026-11-08",
+                                   "--programs", str(src)]), 0)
+        self.assertFalse((WORK / "reminders_sent.json").exists())
 
     def test_cli_dry_run_fixture(self):
         from outreach.cli import main

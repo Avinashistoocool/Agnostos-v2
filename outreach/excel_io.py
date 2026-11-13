@@ -20,7 +20,7 @@ from .models import Professor
 def load_workbook(path, *args, retries: int = 10, **kwargs):
     """openpyxl.load_workbook that tolerates another process mid-save.
 
-    Several senders (IITD, Gmail resend, replies) share professors.xlsx. A
+    Several senders (main SMTP, Gmail resend, replies) share professors.xlsx. A
     reader that lands while a writer (or OneDrive) is rewriting it sees a
     truncated zip; that used to kill a whole send run with BadZipFile.
     """

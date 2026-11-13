@@ -272,7 +272,11 @@ impl Engine {
 }
 
 fn default_dev_cwd() -> PathBuf {
+    // Dev runs only: release binaries must not embed the build machine's path.
+    #[cfg(debug_assertions)]
     let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("..");
+    #[cfg(not(debug_assertions))]
+    let repo = std::env::current_dir().unwrap_or_default();
     if repo.join("outreach").is_dir() {
         match repo.canonicalize() {
             Ok(p) => PathBuf::from(p.to_string_lossy().trim_start_matches(r"\\?\")),

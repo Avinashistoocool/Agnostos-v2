@@ -144,7 +144,7 @@ class ThreadReader(ReplyChecker):
         for a in os.getenv("MY_EMAIL_ALIASES", "").replace(",", ";").split(";"):
             if a.strip():
                 mine.add(a.strip().lower())
-        # Same mailbox, sub-domain alias: user@physics.iitd.ac.in == user@iitd.ac.in
+        # Same mailbox, sub-domain alias: user@dept.uni.edu == user@uni.edu
         for a in list(mine):
             local, _, dom = a.partition("@")
             parts = dom.split(".")
@@ -193,7 +193,7 @@ class ThreadReader(ReplyChecker):
                     seen.add(mid)
                     frm = parseaddr(msg.get("From", ""))[1].lower()
                     # Anything in Sent is ours, and the account has aliases
-                    # (ph1251520@iitd.ac.in vs @physics.iitd.ac.in).
+                    # (user@uni.edu vs user@dept.uni.edu).
                     mine = kind == "sent" or frm in self._my_addresses()
                     k = "" if mine else classify(msg)
                     threads[(row["sheet"], row["row"])].messages.append(Message(

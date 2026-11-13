@@ -219,7 +219,11 @@ class Settings:
     cold_min_probability: int = _i("COLD_MIN_PROBABILITY", 40)
     # Cold first emails link the CV (CV_URL) instead of attaching it.
     cold_attach_cv: bool = _b("COLD_ATTACH_CV", False)
-    cv_url: str = os.getenv("CV_URL", "https://avinashistoocool.github.io/").strip()
+    cv_url: str = os.getenv("CV_URL", "").strip()
+    # First sentence of every cold email (blank = built from the resume), and the
+    # short tag appended to subjects in brackets, e.g. your institution.
+    student_intro: str = os.getenv("STUDENT_INTRO", "").strip()
+    subject_tag: str = os.getenv("SUBJECT_TAG", "").strip()
     # At most this many cold first emails per institution domain per rolling 7 days.
     max_per_domain_week: int = _i("MAX_PER_DOMAIN_WEEK", 3)
     # Cold sends need first initial + surname in the address, not the surname alone.
@@ -252,6 +256,15 @@ class Settings:
     meet_link: str = os.getenv("MEET_LINK", "")
     google_client_secret: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
     google_calendar_id: str = os.getenv("GOOGLE_CALENDAR_ID", "primary")
+
+    # --- `program-reminders` (personal; all blank = reminder emails disabled) ---
+    reminder_recipients: list[str] = field(default_factory=lambda: [
+        a.strip() for a in os.getenv("REMINDER_RECIPIENTS", "").replace(";", ",").split(",")
+        if a.strip()
+    ])
+    reminder_sms_to: str = os.getenv("REMINDER_SMS_TO", "").strip()
+    reminder_tz: str = os.getenv("REMINDER_TZ", "").strip() or os.getenv("MEET_MY_TZ", "Asia/Kolkata")
+    program_cv_dir: str = os.getenv("PROGRAM_CV_DIR", "").strip()
 
     # --- Reply tracking (`check-replies`). Defaults reuse the SMTP login. ---
     imap_host: str = os.getenv("IMAP_HOST", "")

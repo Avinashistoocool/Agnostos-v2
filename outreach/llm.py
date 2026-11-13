@@ -60,7 +60,7 @@ CONFIRMED FACTS (user-verified; the only facts and numbers you may state about t
 HONESTY AND FRAMING — THIS MATTERS MOST
 The student is a second-year undergraduate. Be exactly as strong as the confirmed facts, no stronger and no weaker:
 - Numbers: you may quote numbers from CONFIRMED FACTS verbatim. Never invent, round or alter a number, and never quote any other number (no GPA, no ranks, no percentages that are not listed).
-- Lead with the confirmed result most relevant to THIS professor's field. For particle physics, HEP, ML or physics targets that is GDS-ParT: 84.84% accuracy / 0.9853 macro AUC on 1M JetClass test jets, built in Prof. Abhishek Iyer's HEP group at IIT Delhi (Letter of Commendation). For robotics/swarms/planning use NIDAR; for drones/flight software/reliability use AnaTele; for vision use the CV tracking or medial-axis work. Use only facts relevant to their field; one project, not a list.
+- Lead with the confirmed result most relevant to THIS professor's field (CONFIRMED FACTS groups results by field and says which to lead with). Use only facts relevant to their field; one project, not a list.
 - Never compare against other models, never claim novelty, never say "outperformed", "state of the art" or "beat".
 - Never describe the work as "a small subset", "basic", "mostly to understand", "just to see", and never say you had trouble following, got stuck on or didn't follow their work.
 - Nothing in the email should embarrass the student if the professor asked them to defend it in a five-minute conversation.
@@ -75,14 +75,14 @@ VOICE — WRITE LIKE A PERSON, NOT A LANGUAGE MODEL
 
 EMAIL RULES
 - 110-150 words in the body, in exactly 4 short paragraphs separated by blank lines, after ONE salutation line ("Dear Prof. <Surname>,"; "Dr." if the context says they are not a professor). Never write a second greeting line.
-- Paragraph 1 (who + proof, 1-2 sentences): "I'm a second-year Engineering Physics student at IIT Delhi." plus the single strongest confirmed result for their field, with its code link.
+- Paragraph 1 (who + proof, 1-2 sentences): {intro} plus the single strongest confirmed result for their field, with its code link.
 - Paragraph 2 (why them, 1-2 sentences): name ONE supplied publication, method or topic of theirs (never invent a title) and say in ONE sentence how the student's work connects to it, as something the student wants to work on. A statement, not a confession of confusion.
 - Paragraph 3 (the ask, one sentence, the only question mark in the email): "Could I spend 8-10 weeks in summer 2027 working on <a specific thing in their group>?" then the fallback "If that isn't possible, could you point me to someone who might be a good fit?" may follow as a clause or short sentence.
-- Paragraph 4: "My CV is linked here: {cv_url}" then a short sign-off with the first name only; the signature block is appended automatically.
+- Paragraph 4: {cv_paragraph}a short sign-off with the first name only; the signature block is appended automatically.
 - NEVER use the words "capacity", "space for", "room for" or "any chance". Never ask "May I send my CV" and never say the CV is attached.
 - MONEY: a first email never mentions funding, stipends, salary, payment, costs, travel, visa, unpaid work or self-funding. Not even to say the student needs funding. Funding is discussed only after the professor replies.
 - Plain text, no markdown, no em dashes, no bullet points. British/neutral English.
-- Subject: "<their topic> / <student's matching result> (IIT Delhi)", under 70 characters, e.g. "Belle II GNN background sim / 84.84% JetClass ParT tagger (IIT Delhi)". Never use "inquiry", "enquiry", "internship", "opportunity" or "Application".
+- Subject: "<their topic> / <student's matching result>{subject_tag}", under 70 characters, e.g. "Belle II GNN background sim / graph-network jet tagger{subject_tag}". Never use "inquiry", "enquiry", "internship", "opportunity" or "Application".
 
 OUTPUT
 Return a JSON object with exactly these fields: probability, justification, subject, body.
@@ -236,6 +236,18 @@ def estimate_tokens(text: str) -> int:
     return max(1, int(len(text) / 4) + text.count("\n"))
 
 
+def _intro_sentence(settings, profile: ResumeProfile) -> str:
+    """Opening self-introduction: STUDENT_INTRO from .env, else built from the resume."""
+    intro = str(getattr(settings, "student_intro", "") or "").strip()
+    if intro:
+        return f'"{intro}"'
+    degree = (profile.degree or "").strip()
+    inst = (profile.institution or "").strip()
+    if degree and inst:
+        return f'one sentence saying the student is a {degree} student at {inst}'
+    return "one sentence saying who the student is (year, programme, institution from the profile)"
+
+
 class LLMEvaluator:
     def __init__(self, settings: Settings, profile: ResumeProfile):
         self.settings = settings
@@ -250,7 +262,11 @@ class LLMEvaluator:
             confirmed_facts=confirmed_facts_text(
                 getattr(settings, "confirmed_facts_file", "")
                 or Path(settings.output_dir) / "confirmed_facts.md"),
-            cv_url=getattr(settings, "cv_url", "") or "https://avinashistoocool.github.io/",
+            intro=_intro_sentence(settings, profile),
+            cv_paragraph=(f'"My CV is linked here: {cv_url}" then ' if (cv_url := str(
+                getattr(settings, "cv_url", "") or "").strip()) else ""),
+            subject_tag=(f" ({tag})" if (tag := str(
+                getattr(settings, "subject_tag", "") or "").strip()) else ""),
         )
         self.allowed_numbers = allowed_metrics(confirmed_facts_text(
             getattr(settings, "confirmed_facts_file", "")

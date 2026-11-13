@@ -1,4 +1,4 @@
-param([string]$Python = "C:\Users\Avinash\AppData\Local\Programs\Python\Python313\python.exe")
+param([string]$Python = "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe")
 
 # Builds the headless sidecar engine (dist\engine\agnostos-engine.exe) and copies it to
 # the Tauri externalBin slot (app\src-tauri\binaries\agnostos-engine-x86_64-pc-windows-msvc.exe).

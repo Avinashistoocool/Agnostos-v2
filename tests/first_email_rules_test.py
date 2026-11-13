@@ -20,6 +20,19 @@ from outreach.resume_parser import ResumeProfile
 
 FACTS = Path(__file__).resolve().parents[1] / "output" / "confirmed_facts.md"
 
+def setUpModule():
+    # The repo's facts file holds the verified numbers these drafts quote; the
+    # built-in fallback is deliberately empty.
+    global _facts_patch
+    from unittest.mock import patch
+    _facts_patch = patch.object(settings, "confirmed_facts_file", str(FACTS))
+    _facts_patch.start()
+
+
+def tearDownModule():
+    _facts_patch.stop()
+
+
 GOOD_SUBJECT = "Belle II GNN background sim / 84.84% JetClass tagger (IIT Delhi)"
 GOOD_BODY = """Dear Prof. Kuhr,
 
@@ -64,7 +77,9 @@ class _Client:
 
 def _evaluator():
     s = replace(settings, humanize_rewrite=False, can_self_fund="no",
-                confirmed_facts_file=str(FACTS), cv_url="https://avinashistoocool.github.io/")
+                confirmed_facts_file=str(FACTS), cv_url="https://avinashistoocool.github.io/",
+                student_intro="I'm a second-year Engineering Physics student at IIT Delhi.",
+                subject_tag="IIT Delhi")
     profile = ResumeProfile(name="Avinash Chandra Gupta", email="a@iitd.ac.in")
     return LLMEvaluator(s, profile)
 

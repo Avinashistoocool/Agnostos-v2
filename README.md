@@ -472,15 +472,15 @@ Without the setup, meeting requests still go out. Only the calendar check and th
 python -m outreach.cli program-reminders [--dry-run] [--calendar] [--now YYYY-MM-DD] [--programs PATH]
 ```
 
-This reads `output/programs/internship_programs.json` (CERN, EPFL, ITER, ...) and emails reminders only to the owner's two fixed addresses. Mail goes out from the personal Gmail account (`RESEND_SMTP_*`).
+This reads `output/programs/internship_programs.json` (CERN, EPFL, ITER, ...) and emails reminders only to your own addresses in `REMINDER_RECIPIENTS` (`.env`; blank = disabled, `--dry-run` still previews). Mail goes out from the personal Gmail account (`RESEND_SMTP_*`).
 
 - **Welcome digest.** The first run sends one digest listing every programme, sorted by deadline.
 - **Weekly digest.** After that, a digest goes out once per ISO week (normally Monday). It covers everything due in the next 60 days.
-- **Milestone reminders.** You get an email when applications open, 21 days before the deadline if `referees_needed > 0` ("ask referees now"), and 30/14/7/3/1 days before each deadline. Each email includes the documents checklist, the link and the tailored CV path. The CV is looked up in `output/programs/cvs/<id>.pdf` first, then in `Dynamic-CV/program_cvs/CV_<id>.pdf`.
+- **Milestone reminders.** You get an email when applications open, 21 days before the deadline if `referees_needed > 0` ("ask referees now"), and 30/14/7/3/1 days before each deadline. Each email includes the documents checklist, the link and the tailored CV path. The CV is looked up in `output/programs/cvs/<id>.pdf` first, then in `PROGRAM_CV_DIR/CV_<id>.pdf` if `PROGRAM_CV_DIR` is set.
 - **Idempotency.** `output/programs/reminders_sent.json` records every (programme, milestone) pair. Each reminder is sent once. If runs were missed, you get only the most recent missed milestone; older ones are marked "superseded".
 - **Null deadlines.** Programmes with no deadline appear only in the digest.
-- **Phone notifications.** With `--calendar`, the command creates Google Calendar events: an all-day event on each deadline and a 09:00 IST event on each milestone day, all with popup and email reminders. The Calendar app on your phone then notifies you. Event ids are stored in `output/programs/calendar_events.json`, so changed events are updated, not duplicated. If the token in `output/gcal_token.json` has expired, run `python -m outreach.cli calendar-auth` again. Email still goes out in the meantime.
-- **Optional SMS.** Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `TWILIO_FROM` (env or `.env`) to also text +91 7023037566 through Twilio's REST API. If they're not set, SMS is skipped silently.
+- **Phone notifications.** With `--calendar`, the command creates Google Calendar events: an all-day event on each deadline and a 09:00 event (in `REMINDER_TZ`, default `MEET_MY_TZ`) on each milestone day, all with popup and email reminders. The Calendar app on your phone then notifies you. Event ids are stored in `output/programs/calendar_events.json`, so changed events are updated, not duplicated. If the token in `output/gcal_token.json` has expired, run `python -m outreach.cli calendar-auth` again. Email still goes out in the meantime.
+- **Optional SMS.** Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `TWILIO_FROM` (env or `.env`) plus `REMINDER_SMS_TO` to also text that number through Twilio's REST API. If they're not set, SMS is skipped silently.
 - **Daily run.** The Windows Scheduled Task "Agnostos program reminders" runs `output/run_program_reminders.ps1` every day at 09:00. Its log is `output/program_reminders.log`.
 
 Tests: `python tests/program_reminders_test.py`.
@@ -494,7 +494,7 @@ python -m outreach.cli coordinators [--send] [--live] [--yes] [--only ID ...] [-
 Reads `output/programs/coordinator_outreach.xlsx` (sheet `Outreach`: id, programme, contact name, role, email, source_url, subject, body, attachment path, approved, sent_at, notes, country, message_id). The drafts and the `Skipped` sheet are built by `output/programs/make_coordinator_outreach.py`.
 
 - Only rows with `approved` = `yes` and an empty `sent_at` are considered. Without `--send` the command only lists them; `--send` builds every message (dry run); `--send --live` asks `[Y/N]` and sends.
-- Mail goes out from the main IITD account (`SMTP_*`). Each message carries only the CV in its row's `attachment path` (the `ATTACHMENTS` setting is ignored); a missing file skips the row. The body already has its sign-off, so no extra signature is added.
+- Mail goes out from the main account (`SMTP_*`). Each message carries only the CV in its row's `attachment path` (the `ATTACHMENTS` setting is ignored); a missing file skips the row. The body already has its sign-off, so no extra signature is added.
 - Rows are sent on weekdays between 9:00 and 17:00 in the office's local time (`country` column). Outside that window a row is left for a later run, or held with `--wait`. `--local-window any` turns this off.
 - The self-funding guard (`CAN_SELF_FUND`) blocks any body that offers to pay one's own way.
 - After each real send, `sent_at` and `message_id` are written back, so a row is never mailed twice.

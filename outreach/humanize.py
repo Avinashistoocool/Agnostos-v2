@@ -115,12 +115,10 @@ METRIC_RE = re.compile(
     r"(?<![\w.])(\d+(?:\.\d+)?)(?:\s*(%|percent\b|million\b|kb\b|mb\b|gb\b)|(x\b|\u00d7|m\b|k\b))"
     r"|(?<![\w.\-])(\d+\.\d+)(?![\w.]*\.\w)", re.I)
 
-# Fallback when output/confirmed_facts.md is absent: the user-verified numbers.
+# Fallback when output/confirmed_facts.md is absent: no verified numbers, so
+# every metric in a draft is treated as unverified.
 DEFAULT_CONFIRMED_FACTS = """
-GDS-ParT: 84.84% accuracy and 0.9853 macro AUC on 1M JetClass test jets (10 classes).
-Trained 2.07M parameters on 10M jets on a single 6 GB GPU; cache cut from ~256 KB to ~1.9 KB.
-GDS-ParT-MoE: NMI 0.45/0.43; one expert showed 4.5x muon enrichment.
-NIDAR: 100% simulated coverage. AnaTele: 20 rules.
+(No confirmed facts file yet. Create output/confirmed_facts.md or set CONFIRMED_FACTS_FILE.)
 """
 
 _UNIT_ALIASES = {"percent": "%", "\u00d7": "x", "million": "m"}

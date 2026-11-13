@@ -1,15 +1,15 @@
 ﻿"""Deadline reminders for internship / summer programmes (CERN, EPFL, ITER, ...).
 
 Reads output/programs/internship_programs.json and, once a day:
-  * emails the owner (only the two fixed addresses below) when a programme
+  * emails the owner (only the REMINDER_RECIPIENTS addresses in .env) when a programme
     opens, when referees should be asked (21 days before the deadline if
     referees are needed), and 30/14/7/3/1 days before each deadline;
   * sends a weekly digest (Mondays, or the first run of a week) of everything
     due in the next 60 days, plus a one-off "tracker is live" digest;
   * with --calendar, mirrors every milestone into Google Calendar (all-day
-    deadline events + 09:00 IST milestone events with popup/email reminders)
+    deadline events + 09:00 (REMINDER_TZ) milestone events with popup/email reminders)
     so the phone's Calendar app notifies;
-  * optionally texts the phone through Twilio when TWILIO_* is set.
+  * optionally texts REMINDER_SMS_TO through Twilio when TWILIO_* is set.
 
 State (idempotency) lives next to the data:
   reminders_sent.json   one entry per (programme, milestone) / digest
@@ -34,15 +34,29 @@ from typing import Callable, Iterable
 
 from .config import settings
 
-RECIPIENTS = ("avinashchandragupta206@gmail.com", "ph1251520@physics.iitd.ac.in")
-PHONE = "+917023037566"
 DEADLINE_OFFSETS = (30, 14, 7, 3, 1)
 REFEREE_OFFSET = 21
 DIGEST_HORIZON = 60
 OPENS_STALE_DAYS = 14          # an "applications open" note older than this is not worth a mail
 COMBINE_THRESHOLD = 3          # more due reminders than this in one run -> one combined email
-TZ = "Asia/Kolkata"
-EXTERNAL_CV_DIR = Path(r"C:\Users\Avinash\OneDrive\Desktop\Dynamic-CV\program_cvs")
+
+
+def recipients() -> tuple[str, ...]:
+    """The owner's own addresses (REMINDER_RECIPIENTS); reminders never go anywhere else."""
+    return tuple(settings.reminder_recipients)
+
+
+def sms_to() -> str:
+    return settings.reminder_sms_to
+
+
+def reminder_tz() -> str:
+    return settings.reminder_tz or "UTC"
+
+
+def external_cv_dir() -> Path | None:
+    """Optional extra folder holding CV_<id>.pdf files (PROGRAM_CV_DIR)."""
+    return Path(settings.program_cv_dir).expanduser() if settings.program_cv_dir else None
 
 
 def programs_dir() -> Path:
@@ -107,8 +121,9 @@ def milestones(p: dict) -> list[Milestone]:
 
 def cv_path(p: dict) -> Path | None:
     pid = str(p.get("id"))
-    for c in (programs_dir() / "cvs" / f"{pid}.pdf", EXTERNAL_CV_DIR / f"CV_{pid}.pdf"):
-        if c.exists():
+    extra = external_cv_dir()
+    for c in (programs_dir() / "cvs" / f"{pid}.pdf", extra / f"CV_{pid}.pdf" if extra else None):
+        if c is not None and c.exists():
             return c
     return None
 
@@ -304,7 +319,10 @@ def digest_email(programs: list[dict], today: date, welcome: bool) -> tuple[str,
 
 def _guard(to: Iterable[str]) -> list[str]:
     to = list(to)
-    bad = [a for a in to if a not in RECIPIENTS]
+    allowed = {a.lower() for a in recipients()}
+    if not allowed:
+        raise RuntimeError("REMINDER_RECIPIENTS is not set in .env")
+    bad = [a for a in to if a.lower() not in allowed]
     if bad:
         raise ValueError(f"refusing to email non-owner address(es): {bad}")
     return to
@@ -334,8 +352,8 @@ class GmailSender:
         srv.login(s.resend_smtp_user, s.resend_smtp_password)
         self.server = srv
 
-    def __call__(self, subject: str, body: str, to: Iterable[str] = RECIPIENTS) -> None:
-        to = _guard(to)
+    def __call__(self, subject: str, body: str, to: Iterable[str] | None = None) -> None:
+        to = _guard(recipients() if to is None else to)
         msg = EmailMessage()
         msg["From"] = self.s.resend_smtp_from or self.s.resend_smtp_user
         msg["To"] = ", ".join(to)
@@ -367,10 +385,10 @@ def twilio_sms(text: str) -> bool:
     """Optional: text the phone when TWILIO_ACCOUNT_SID/AUTH_TOKEN/FROM are set."""
     sid, tok, frm = (os.getenv("TWILIO_ACCOUNT_SID", ""), os.getenv("TWILIO_AUTH_TOKEN", ""),
                      os.getenv("TWILIO_FROM", ""))
-    if not (sid and tok and frm):
+    if not (sid and tok and frm and sms_to()):
         return False
     from .tls import urlopen
-    data = urllib.parse.urlencode({"To": PHONE, "From": frm, "Body": text[:1500]}).encode()
+    data = urllib.parse.urlencode({"To": sms_to(), "From": frm, "Body": text[:1500]}).encode()
     req = urllib.request.Request(
         f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json", data=data,
         headers={"Authorization": "Basic " + base64.b64encode(f"{sid}:{tok}".encode()).decode()})
@@ -379,7 +397,8 @@ def twilio_sms(text: str) -> bool:
 
 
 def sms_configured() -> bool:
-    return all(os.getenv(k) for k in ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM"))
+    return bool(sms_to()) and all(
+        os.getenv(k) for k in ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM"))
 
 
 # ---------------------------------------------------------------- calendar
@@ -421,8 +440,8 @@ def calendar_bodies(programs: Iterable[dict], today: date) -> dict[str, dict]:
             out[f"{pid}|{m.key}"] = {
                 "summary": title,
                 "description": desc,
-                "start": {"dateTime": f"{m.day.isoformat()}T09:00:00", "timeZone": TZ},
-                "end": {"dateTime": f"{m.day.isoformat()}T09:15:00", "timeZone": TZ},
+                "start": {"dateTime": f"{m.day.isoformat()}T09:00:00", "timeZone": reminder_tz()},
+                "end": {"dateTime": f"{m.day.isoformat()}T09:15:00", "timeZone": reminder_tz()},
                 "transparency": "transparent",
                 "colorId": "6",
                 "reminders": {"useDefault": False, "overrides": [
@@ -575,7 +594,7 @@ def run(programs: list[dict], today: date, out_dir: Path | None = None, *,
     if dues and sms is not None:
         text = "Agnostos: " + "; ".join(headline(d, today) for d in dues)
         if dry_run:
-            log(f"  [dry-run] would SMS {PHONE}: {text[:160]}")
+            log(f"  [dry-run] would SMS {sms_to()}: {text[:160]}")
         else:
             try:
                 if sms(text):
@@ -607,6 +626,10 @@ def cmd_program_reminders(args) -> int:
         return 0
     programs = load_programs(path)
     print(f" {len(programs)} programme(s) loaded from {path}")
+    if not recipients() and not args.dry_run:
+        print(" program-reminders is disabled: set REMINDER_RECIPIENTS (your own address[es], "
+              "comma-separated) in .env. Use --dry-run to preview without it.")
+        return 0
     svc = calendar_service() if args.calendar else None
     sender = None if args.dry_run else GmailSender()
     try:
@@ -616,5 +639,5 @@ def cmd_program_reminders(args) -> int:
         if sender is not None:
             sender.close()
     print(f" Done: {len(res['emails'])} email(s){' planned' if args.dry_run else ' sent'}"
-          f" to {', '.join(RECIPIENTS)}; calendar={res['calendar']}; sms={res['sms']}")
+          f" to {', '.join(recipients()) or '(REMINDER_RECIPIENTS not set)'}; calendar={res['calendar']}; sms={res['sms']}")
     return 0

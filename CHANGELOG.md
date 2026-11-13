@@ -25,6 +25,12 @@ changes, MINOR for new commands or options, PATCH for fixes.
 - Docker build context no longer includes local `build/`, `dist/`, `app/`,
   egg-info or diagnostic files; `build-engine.ps1` falls back to the `python`
   on PATH when the default interpreter path does not exist.
+- Privacy: personal addresses, phone number, CV folder, CV link and the
+  owner's self-introduction are no longer hard-coded; they come from
+  `REMINDER_RECIPIENTS`, `REMINDER_SMS_TO`, `REMINDER_TZ`, `PROGRAM_CV_DIR`,
+  `CV_URL`, `STUDENT_INTRO` and `SUBJECT_TAG` in `.env` (unset = feature
+  disabled with a message). `build-app.ps1` remaps build-machine paths so the
+  shipped `agnostos.exe` does not contain them.
 
 ## [2.2.0] - 2026-11-04
 
