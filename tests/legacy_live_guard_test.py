@@ -82,6 +82,30 @@ class LegacyGuardTests(unittest.TestCase):
         self.assertEqual((allowed, room), ([], 0))
         self.assertIn("daily cap", held[0][1])
 
+    def test_operator_ceiling_ninety_counts_prior_sends(self):
+        log = self.scratch / "ninety.csv"
+        log.write_text("time,mode,status,email\n" +
+                       "".join(f"2026-11-02 09:00:00,legacy,sent,old{i}@uni.de\n"
+                               for i in range(87)), encoding="utf-8")
+        with patch("outreach.legacy_guard.COLD_DAILY_HARD_CAP", 90):
+            allowed, _, _, room = plan_legacy_live(
+                [candidate(f"Next{i}") for i in range(10)], log,
+                daily_cap=150, limit=150, window_spec="9-17",
+                now=datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc))
+        self.assertEqual(room, 3)
+        self.assertEqual(len(allowed), 3)
+
+    def test_ceiling_configuration_validation(self):
+        from outreach.config import _cold_daily_ceiling, ConfigError
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(_cold_daily_ceiling(), 40)
+        with patch.dict(os.environ, {"COLD_DAILY_HARD_CAP": "90"}):
+            self.assertEqual(_cold_daily_ceiling(), 90)
+        for invalid in ("0", "91", "-1", "ninety", "40.5"):
+            with patch.dict(os.environ, {"COLD_DAILY_HARD_CAP": invalid}):
+                with self.assertRaises(ConfigError):
+                    _cold_daily_ceiling()
+
     def test_reply_queue_daily_cap_counts_prior_delivery(self):
         with patch.dict(os.environ, {"PYTHON_DOTENV_DISABLED": "1"}):
             from outreach.cli import reply_live_room

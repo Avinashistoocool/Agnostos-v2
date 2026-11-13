@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .focus import in_focus
 from .schedule import SendWindow, country_tz
+from .config import COLD_DAILY_HARD_CAP
 
 
 def plan_legacy_live(rows: list[dict], log_path: Path, *,
@@ -37,7 +38,7 @@ def plan_legacy_live(rows: list[dict], log_path: Path, *,
             already_sent.add(address)
             if str(row.get("Sent At", "")).startswith(today):
                 today_sent.add(("legacy", address))
-    room = max(0, min(daily_cap, 40) - len(today_sent))
+    room = max(0, min(daily_cap, COLD_DAILY_HARD_CAP) - len(today_sent))
     eligible, held, selected = [], [], set()
     for row in rows:
         email = str(row.get("Email", "")).lower().strip()

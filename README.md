@@ -369,7 +369,7 @@ python -m outreach.cli send --live --top 10 --min-probability 60
 - `--top N` ranks the drafted rows by acceptance probability and mails the best N. This is usually what you want.
 - `--min-probability N` sets a quality floor instead of a count.
 - `--limit N` caps how many emails are actually sent in this run, applied after the `--top` ordering.
-- `DAILY_SEND_CAP` in `.env` is the default for `--limit`. Cold first emails (`send`, `resend`, `legacy`) are clamped at 40 per day in code even if `.env` or `--limit` asks for more.
+- `DAILY_SEND_CAP` in `.env` is the default for `--limit`. Cold sends (`send`, `resend`, `legacy`) are also limited by `COLD_DAILY_HARD_CAP` (default 40, configurable from 1 to 90). Invalid ceilings fail explicitly. Raising it does not bypass domain limits or increase the desktop UI's own limits.
 
 **Who is never cold-mailed.** `send`, `resend` and `legacy` skip, with a reason in the log: any address that bounced on either account (`Reply Status` starting with "bounced", bounce records in `send_log.csv`, `output/FAILURES.json`; reason `skipped: bounced before`); people and domains in `output/no_cold_email.json`; student, alumni and shared mailboxes (`@postgrad.`, `@studenti.`, `@g.harvard.edu`, `name.20@ucl.ac.uk`, `lehre-`, `pec`); addresses without the first initial plus surname; `suspect` addresses (unless `--allow-unverified`); drafts flagged `REJECTED DRAFT`; and any institution domain that already had `MAX_PER_DOMAIN_WEEK` (3) cold emails in the last 7 days.
 
@@ -396,8 +396,10 @@ Each successful send also stores its `Message ID`, which `check-replies` uses to
 **Local Windows recovery setup.** This workstation also uses the tasks
 `Agnostos IITD sender` and `Agnostos Gmail legacy sender`, pointing to the
 local `output\run_iitd_loop.ps1` and `output\run_gmail_loop.ps1` scripts.
-They start at login and retry hourly if not already running, with no task
-execution timeout. Each loop has a mutex to prevent duplicate loop instances.
+They start at login and retry every 30 minutes if not already running. Each
+script performs one round and exits; Task Scheduler handles the next round
+instead of a long-lived sleeping console. Each script has a mutex to prevent
+duplicate instances, and writes start/end timestamps and its exit code to the log.
 The weekday launcher calls these same scripts; it must not launch identical
 Gmail resends. The Gmail loop sends only approved legacy/CERN letters.
 These are local operational files, not installed by cloning the repository.

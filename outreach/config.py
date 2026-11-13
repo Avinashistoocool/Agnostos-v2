@@ -113,7 +113,18 @@ def _require_file(value, env_key: str, what: str) -> Path:
 
 # Hard ceiling for cold first emails per day per account, applied in code even
 # if DAILY_SEND_CAP / RESEND_DAILY_CAP in .env are higher. Replies are not cold.
-COLD_DAILY_HARD_CAP = 40
+def _cold_daily_ceiling() -> int:
+    raw = os.getenv("COLD_DAILY_HARD_CAP", "40")
+    try:
+        value = int(raw)
+    except ValueError:
+        raise ConfigError("COLD_DAILY_HARD_CAP must be an integer from 1 to 90") from None
+    if not 1 <= value <= 90:
+        raise ConfigError("COLD_DAILY_HARD_CAP must be from 1 to 90")
+    return value
+
+
+COLD_DAILY_HARD_CAP = _cold_daily_ceiling()
 
 # OpenAI only caches prompt prefixes at or above this length, and does so
 # automatically. Below it, every input token is billed at the full rate.
