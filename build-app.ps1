@@ -1,4 +1,4 @@
-﻿param([switch]$SkipEngine)
+param([switch]$SkipEngine)
 
 # Release build of the Tauri app (NSIS + MSI) with the frozen engine sidecar.
 # Build-machine paths (user profile, cargo registry, checkout) are remapped so
@@ -22,12 +22,15 @@ $remap = @(
 $env:RUSTFLAGS = (($env:RUSTFLAGS, $remap) | Where-Object { $_ }) -join " "
 
 Set-Location app
+# npm/cargo log progress on stderr, which "Stop" would treat as a failure.
+$ErrorActionPreference = "Continue"
 if (-not (Test-Path node_modules)) {
     npm ci --no-audit --no-fund
     if ($LASTEXITCODE -ne 0) { throw "npm ci failed" }
 }
 npm run tauri build
 if ($LASTEXITCODE -ne 0) { throw "Tauri build failed" }
+$ErrorActionPreference = "Stop"
 
 $exe = "src-tauri\target\release\agnostos.exe"
 $bytes = [IO.File]::ReadAllBytes((Resolve-Path $exe))
