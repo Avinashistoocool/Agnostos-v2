@@ -8,6 +8,15 @@ output/
 docs/
 tests/
 site/
+build/
+dist/
+app/
+*.egg-info
+.pytest_cache
+.venv
+venv
+diag_*
+*.log
 **/__pycache__
 *.xlsx
 *.pdf

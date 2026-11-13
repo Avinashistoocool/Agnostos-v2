@@ -20,6 +20,11 @@ changes, MINOR for new commands or options, PATCH for fixes.
   weekday/local windows, funding rules, a shared daily cap and per-run address
   deduplication. The desktop additionally rejects zero live-send limits and
   refuses raw safety-bypass flags in its packaged worker.
+- The desktop apps now expose `program-reminders` and `coordinators`
+  (coordinator live sends need typed `SEND COORDINATORS` confirmation).
+- Docker build context no longer includes local `build/`, `dist/`, `app/`,
+  egg-info or diagnostic files; `build-engine.ps1` falls back to the `python`
+  on PATH when the default interpreter path does not exist.
 
 ## [2.2.0] - 2026-11-04
 

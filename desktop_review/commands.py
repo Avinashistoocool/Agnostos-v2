@@ -57,6 +57,12 @@ COMMANDS = {
     "replace-failed": spec("Find replacements for failed addresses",
                            xlsx="file", per_failure="int"),
     "calendar-auth": spec("Authorize Google Calendar in the system browser"),
+    "program-reminders": spec("Email/calendar reminders for internship programme deadlines",
+                              dry_run="bool", calendar="bool", programs="file"),
+    "coordinators": spec("Preview/send approved internship-coordinator emails; "
+                         "live SMTP requires double confirmation",
+                         xlsx="file", send="bool", live="bool",
+                         local_window="text", wait="bool"),
     "tls-check": spec("Check certificate configuration"),
     "discover": spec("Discover researchers from topics", query="text", resume="resume",
                      count="int", batches="int", countries="text", since="int",
@@ -73,9 +79,9 @@ COMMANDS = {
 }
 
 SAFE_TEXT = re.compile(r"^[^\x00-\x1f\x7f]{1,300}$")
-LIVE_COMMANDS = {"send", "resend", "replies", "legacy", "legacy-researchers"}
+LIVE_COMMANDS = {"send", "resend", "replies", "legacy", "legacy-researchers", "coordinators"}
 WINDOW = re.compile(r"^(?:[0-1]?\d|2[0-3])-(?:[0-1]?\d|2[0-3])$")
-PATH_FIELDS = {"xlsx", "sources", "output", "export_dir", "exclude"}
+PATH_FIELDS = {"xlsx", "sources", "output", "export_dir", "exclude", "programs"}
 
 
 def _file(value: str, workspace: Path, *, resume: bool = False) -> str:
@@ -144,7 +150,7 @@ def build_argv(workspace: Workspace, command: str, options: dict,
             raise RuntimeError(f"Unknown schema type: {typ}")
         argv.extend((flag, value))
         parsed[key] = raw if typ in ("int", "float") else value
-    if parsed.get("live") and command in {"replies", "legacy", "legacy-researchers"} and not parsed.get("send"):
+    if parsed.get("live") and command in {"replies", "legacy", "legacy-researchers", "coordinators"} and not parsed.get("send"):
         raise ReviewError(400, "Live requires selecting Send for this command")
     if command == "send" and parsed.get("review_to") and not parsed.get("review"):
         raise ReviewError(400, "Review-to requires Review")

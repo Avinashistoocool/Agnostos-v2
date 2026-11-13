@@ -122,7 +122,7 @@ class FullDesktopContractTests(unittest.TestCase):
 
     def test_mail_defaults_and_confirmations(self):
         for command in ("send", "resend", "replies", "archive-sent",
-                        "legacy", "legacy-researchers"):
+                        "legacy", "legacy-researchers", "coordinators"):
             with self.subTest(command=command):
                 argv, live = build_argv(self.workspace, command, {})
                 self.assertFalse(live)
@@ -133,6 +133,7 @@ class FullDesktopContractTests(unittest.TestCase):
             ("resend", {"live": True}), ("replies", {"send": True, "live": True}),
             ("legacy", {"send": True, "live": True}),
             ("legacy-researchers", {"send": True, "live": True}),
+            ("coordinators", {"send": True, "live": True}),
         ]:
             with self.subTest(command=command, options=options):
                 self.assert_rejected(command, options, status=403)
@@ -140,7 +141,7 @@ class FullDesktopContractTests(unittest.TestCase):
                                         f"SEND {command.upper()}")
                 self.assertTrue(live)
                 self.assertIn("--local-window", argv)
-        for command in ("legacy", "legacy-researchers"):
+        for command in ("legacy", "legacy-researchers", "coordinators"):
             self.assert_rejected(command, {"live": True},
                                  confirmation=f"SEND {command.upper()}")
         self.assert_rejected("replies", {"live": True}, confirmation="SEND REPLIES")

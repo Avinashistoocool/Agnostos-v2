@@ -22,6 +22,8 @@ META = {
     "stats": ("Statistics", "Maintain"),
     "tls-check": ("TLS check", "Maintain"),
     "calendar-auth": ("Authorize Google Calendar", "Maintain"),
+    "program-reminders": ("Programme deadline reminders", "Maintain"),
+    "coordinators": ("Email programme coordinators", "Send"),
 }
 
 HELP = {

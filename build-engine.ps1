@@ -5,7 +5,12 @@ param([string]$Python = "C:\Users\Avinash\AppData\Local\Programs\Python\Python31
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
-if (-not (Test-Path $Python)) { throw "Python not found: $Python" }
+if (-not (Test-Path $Python)) {
+    # Other machines/CI: fall back to the python on PATH (or pass -Python explicitly).
+    $found = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $found) { throw "Python not found: $Python" }
+    $Python = $found.Source
+}
 & $Python -c "import PyInstaller" 2>$null
 if ($LASTEXITCODE -ne 0) {
     & $Python -m pip install --quiet "pyinstaller>=6.10"

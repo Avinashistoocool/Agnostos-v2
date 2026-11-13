@@ -30,6 +30,8 @@ export const TITLES: Record<string, string> = {
   stats: "Statistics",
   "tls-check": "Connection check",
   "calendar-auth": "Connect Google Calendar",
+  "program-reminders": "Programme deadline reminders",
+  "coordinators": "Email programme coordinators",
 };
 
 export function JobStatusBadge({ job }: { job: Job }) {
