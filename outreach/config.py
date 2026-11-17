@@ -199,6 +199,11 @@ class Settings:
     discover_top_universities: int = _i("DISCOVER_TOP_UNIVERSITIES", 0)
     discover_prestige_weight: float = _f("DISCOVER_PRESTIGE_WEIGHT", 1.0)
     discover_also_universities: str = os.getenv("DISCOVER_ALSO_UNIVERSITIES", "")
+    # How much "can this host fund me?" counts against topic fit (0 = off, 1 = equal,
+    # 2 = funding counts double). Applied in discovery, local ranking, legacy and send order.
+    funding_weight: float = _f("FUNDING_WEIGHT", 1.0)
+    # Include company/industry research labs in discovery (OpenAlex type "company").
+    discover_include_companies: bool = _b("DISCOVER_INCLUDE_COMPANIES", True)
     # Only draft/send professors whose work matches FOCUS_KEYWORDS (physics/HEP by default).
     focus: bool = _b("FOCUS", True)
     focus_keywords: str = os.getenv("FOCUS_KEYWORDS", "")

@@ -32,7 +32,8 @@ from .discover import Discoverer, resolve_countries
 COLUMNS = ["Name", "Email", "Institution", "Country", "h-index", "Citations",
            "Known for", "Recent work", "Programme route", "Why them", "Source",
            "Email Status", "Email Notes", "Subject", "Draft", "Approved",
-           "Send Status", "Sent At", "Message ID", "OpenAlex ID", "Attachment"]
+           "Send Status", "Sent At", "Message ID", "OpenAlex ID", "Attachment",
+           "Funding Score", "Funding Route"]
 
 
 def row_attachments(row: dict) -> list[str] | None:
@@ -82,12 +83,18 @@ COUNTRY_ROUTES = {"DE": "daad", "CA": "mitacs", "FR": "charpak", "CH": "cern"}
 
 
 def programme_for(institution: str, country: str) -> str:
+    from .funding import funding_score
     inst = (institution or "").lower()
     keys = [k for pat, k in INST_ROUTES if re.search(pat, inst)]
+    named_host = bool(keys)
     if not keys and country in COUNTRY_ROUTES:
         keys.append(COUNTRY_ROUTES[country])
     keys.append("group")
-    return "; ".join(PROGRAMMES[k] for k in dict.fromkeys(keys))
+    routes = [PROGRAMMES[k] for k in dict.fromkeys(keys)]
+    fund, funded = funding_score(institution, country)
+    if not named_host and fund >= 0.6 and funded not in routes:
+        routes.insert(0, funded)
+    return "; ".join(routes)
 
 
 @dataclass
@@ -113,8 +120,14 @@ def _author_rows(disc: Discoverer, params: dict) -> list[dict]:
 
 
 def search_legends(disc: Discoverer, topics: list[str], countries: list[str],
-                   min_h: int, per_topic: int, active_since: int) -> list[Legend]:
-    """Highest-impact authors whose work matches each topic and who still publish."""
+                   min_h: int, per_topic: int, active_since: int,
+                   funding_weight: float = 0.0, companies: bool = False) -> list[Legend]:
+    """Highest-impact authors whose work matches each topic and who still publish.
+
+    With `funding_weight`, candidates at hosts that can pay a visiting student
+    (industry labs, funded facilities/programmes) rank higher. With `companies`,
+    authors at company research labs (Google, Microsoft, NVIDIA...) are included."""
+    from .funding import funding_score
     found: dict[str, Legend] = {}
     for topic in topics:
         # Works search ranks by relevance; collect the authors of the most-cited
@@ -122,6 +135,8 @@ def search_legends(disc: Discoverer, topics: list[str], countries: list[str],
         flt = ["cited_by_count:>200", f"from_publication_date:{active_since - 10}-01-01"]
         if countries:
             flt.append("authorships.countries:" + "|".join(countries))
+        if companies:
+            flt.append("authorships.institutions.type:company")
         works = (disc._api("/works", {"search": topic, "filter": ",".join(flt),
                                      "sort": "cited_by_count:desc", "per-page": 100,
                                      "select": "authorships"}) or {}).get("results") or []
@@ -139,15 +154,28 @@ def search_legends(disc: Discoverer, topics: list[str], countries: list[str],
                 "select": "id,display_name,summary_stats,cited_by_count,"
                           "last_known_institutions,topics,counts_by_year"})
         picked = 0
-        for r in sorted(rows, key=lambda r: -((r.get("summary_stats") or {}).get("h_index") or 0)):
+
+        def key(r):
+            h = (r.get("summary_stats") or {}).get("h_index") or 0
+            if not funding_weight:
+                return -h
+            inst = (r.get("last_known_institutions") or [{}])[0] or {}
+            fund = funding_score(inst.get("display_name", ""),
+                                 (inst.get("country_code") or "").upper())[0]
+            # h ~ 60-200; scale funding so weight 1 is worth ~40 h-index points.
+            return -(h + funding_weight * 40.0 * fund)
+
+        for r in sorted(rows, key=key):
             h = (r.get("summary_stats") or {}).get("h_index") or 0
             if h < min_h:
-                break
+                continue
             recent = sum(c.get("works_count", 0) for c in (r.get("counts_by_year") or [])
                          if c.get("year", 0) >= active_since)
             if recent < 2:               # retired / no longer active
                 continue
             inst = (r.get("last_known_institutions") or [{}])[0] or {}
+            if companies and inst.get("type") not in (None, "company"):
+                continue
             aid = r["id"]
             if aid in found:
                 continue
@@ -325,13 +353,15 @@ def already_contacted(output_dir: Path) -> tuple[set[str], set[str], set[str]]:
     return ids, names, emails
 
 
-def merge(rows: list[dict], legends: list[Legend]) -> list[dict]:
+def merge(rows: list[dict], legends: list[Legend], funding_weight: float = 0.0) -> list[dict]:
+    from .funding import funding_score
     have = {(r.get("OpenAlex ID") or r.get("Name") or "").lower() for r in rows}
     for lg in legends:
         key = (lg.openalex_id or lg.name).lower()
         if key in have:
             continue
         have.add(key)
+        fund, route = funding_score(lg.institution, lg.country)
         rows.append({
             "Name": lg.name, "Email": lg.email, "Institution": lg.institution,
             "Country": lg.country, "h-index": lg.h_index, "Citations": lg.citations,
@@ -339,8 +369,17 @@ def merge(rows: list[dict], legends: list[Legend]) -> list[dict]:
             "Programme route": programme_for(lg.institution, lg.country),
             "Source": lg.source, "Email Status": lg.email_status,
             "Email Notes": lg.email_notes, "Approved": "", "Send Status": "",
-            "OpenAlex ID": lg.openalex_id})
-    rows.sort(key=lambda r: -(int(r.get("h-index") or 0)))
+            "OpenAlex ID": lg.openalex_id,
+            "Funding Score": fund, "Funding Route": route})
+    for r in rows:
+        if r.get("Funding Score") in (None, ""):
+            r["Funding Score"], r["Funding Route"] = funding_score(
+                r.get("Institution", ""), r.get("Country", ""))
+
+    def rank(r):
+        h = int(r.get("h-index") or 0)
+        return -(h + funding_weight * 40.0 * float(r.get("Funding Score") or 0))
+    rows.sort(key=rank)
     return rows
 
 

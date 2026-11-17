@@ -31,6 +31,9 @@ class Professor:
 
     # Pipeline results
     local_score: float = 0.0
+    fit_score: float = 0.0          # topic fit alone (local_score blends in funding)
+    funding_score: float = 0.0
+    funding_note: str = ""
     matched_terms: list[str] = field(default_factory=list)
     probability: int = 0
     justification: str = ""
@@ -90,6 +93,8 @@ class Professor:
             lines.append("Topics: " + ", ".join(self.openalex_concepts[:8]))
         if self.funding_status:
             lines.append(f"Funding: {self.funding_status}")
+        if self.funding_note:
+            lines.append(f"Likely funded route: {self.funding_note}")
         if self.eligibility:
             lines.append(f"Eligibility: {self.eligibility}")
         if self.application_route:

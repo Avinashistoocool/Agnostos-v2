@@ -81,6 +81,7 @@ EMAIL RULES
 - Paragraph 4: {cv_paragraph}a short sign-off with the first name only; the signature block is appended automatically.
 - NEVER use the words "capacity", "space for", "room for" or "any chance". Never ask "May I send my CV" and never say the CV is attached.
 - MONEY: a first email never mentions funding, stipends, salary, payment, costs, travel, visa, unpaid work or self-funding. Not even to say the student needs funding. Funding is discussed only after the professor replies.
+- PROGRAMME: if the context has a "Likely funded route" naming a specific programme (e.g. CERN Summer Student, Summer@EPFL, Google Student Researcher), you may say once that the student would apply through that programme. Use only the programme's name; drop anything in brackets and any word about pay, stipend or money. Skip it if the route is generic ("university group", "ask host").
 - Plain text, no markdown, no em dashes, no bullet points. British/neutral English.
 - Subject: "<their topic> / <student's matching result>{subject_tag}", under 70 characters, e.g. "Belle II GNN background sim / graph-network jet tagger{subject_tag}". Never use "inquiry", "enquiry", "internship", "opportunity" or "Application".
 

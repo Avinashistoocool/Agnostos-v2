@@ -119,10 +119,15 @@ class LocalMatcher:
         combined = 0.45 * min(cosine * 2.5, 1.0) + 0.55 * term_signal
         return round(combined, 4), matched
 
-    def rank(self, professors: list[Professor]) -> list[Professor]:
+    def rank(self, professors: list[Professor], funding_weight: float = 0.0) -> list[Professor]:
+        from .funding import blended, funding_score
         self.fit(professors)
         for p in professors:
-            p.local_score, p.matched_terms = self.score(p)
+            p.fit_score, p.matched_terms = self.score(p)
+            p.funding_score, p.funding_note = funding_score(
+                p.institution, p.country, notes=f"{p.department} {p.funding_status}")
+            p.local_score = round(blended(p.fit_score, p.funding_score, funding_weight), 4) \
+                if funding_weight else p.fit_score
         return sorted(professors, key=lambda p: -p.local_score)
 
 
@@ -130,7 +135,8 @@ MIN_CONTEXT_CHARS = 30
 
 
 def filter_candidates(professors: list[Professor], profile: ResumeProfile,
-                      min_score: float, max_count: int) -> tuple[list[Professor], list[Professor]]:
+                      min_score: float, max_count: int,
+                      funding_weight: float = 0.0) -> tuple[list[Professor], list[Professor]]:
     """Return (selected, rejected) after local ranking + threshold + cap.
 
     Professors with no usable research signal are rejected regardless of score:
@@ -140,15 +146,16 @@ def filter_candidates(professors: list[Professor], profile: ResumeProfile,
     to say something specific.
     """
     matcher = LocalMatcher(profile)
-    ranked = matcher.rank(professors)
+    ranked = matcher.rank(professors, funding_weight=funding_weight)
     selected, rejected = [], []
     for p in ranked:
         has_signal = (bool(p.recent_works)
                       or len(p.personal_text().strip()) >= MIN_CONTEXT_CHARS)
         if not p.email:
             p.llm_status = "skipped: no email"
-        elif p.local_score < min_score:
-            p.llm_status = f"skipped: local score {p.local_score} < {min_score}"
+        # The relevance floor applies to topic fit; funding can't rescue an off-topic host.
+        elif p.fit_score < min_score:
+            p.llm_status = f"skipped: local score {p.fit_score} < {min_score}"
         elif not has_signal:
             p.llm_status = "skipped: too little research context to personalize"
         elif len(selected) >= max_count:

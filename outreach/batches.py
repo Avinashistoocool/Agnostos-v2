@@ -130,6 +130,7 @@ def run_batch(disc: Discoverer, spec: BatchSpec, state: BatchState,
               inst_types: list[str] | None = None,
               resolve_domains: bool = True, min_relevance: float = 0.1,
               top_unis: list[dict] | None = None, prestige_weight: float = 1.0,
+              funding_weight: float = 0.0,
               on_page=None) -> tuple[list[Professor], BatchResult]:
     """Page through one query until `spec.quota` senior researchers are found.
 
@@ -207,10 +208,14 @@ def run_batch(disc: Discoverer, spec: BatchSpec, state: BatchState,
     if skip_names is None:
         skip_names = set()
     def rank_key(c: Candidate) -> float:
+        from .funding import funding_score
+        fund = funding_score(c.institution, c.country)[0] if funding_weight else 0.0
+        # Candidate.score is ~0-10; scale funding to the same range.
+        base = c.score + funding_weight * 5.0 * fund
         if not ranks or not c.uni_rank:
-            return -c.score
+            return -base
         # Up to +5 for the #1 university, sliding to ~0 for the last one.
-        return -(c.score + prestige_weight * 5.0 * (1 - (c.uni_rank - 1) / len(ranks)))
+        return -(base + prestige_weight * 5.0 * (1 - (c.uni_rank - 1) / len(ranks)))
 
     professors = []
     for cand in sorted(senior.values(), key=rank_key):
@@ -239,6 +244,7 @@ def run_batches(queries: list[str], count: int = 1000, batches: int = 4,
                 inst_types: list[str] | None = None, resolve_domains: bool = True,
                 min_relevance: float = 0.1, top_universities: int = 0,
                 prestige_weight: float = 1.0, also_universities: list[str] | None = None,
+                funding_weight: float = 0.0,
                 on_top_unis=None,
                 on_batch_start=None, on_page=None, on_batch_done=None):
     """Run (or resume) the whole plan. Yields `(professors, BatchResult)` per batch.
@@ -301,7 +307,8 @@ def run_batches(queries: list[str], count: int = 1000, batches: int = 4,
                                skip_names=skip_names, inst_types=inst_types,
                                resolve_domains=resolve_domains,
                                min_relevance=min_relevance, top_unis=top_unis,
-                               prestige_weight=prestige_weight, on_page=on_page)
+                               prestige_weight=prestige_weight,
+                               funding_weight=funding_weight, on_page=on_page)
         carry = max(0, spec.quota - res.found) if carry_shortfall else 0
         yield profs, res
         # Only mark done once the caller has had the chance to save the rows.

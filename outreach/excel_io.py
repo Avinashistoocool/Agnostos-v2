@@ -105,6 +105,8 @@ RESULT_COLUMNS = [
     "Sent At",
     "Reply Status",
     "Follow-up Notes",
+    "Funding Score",
+    "Funding Route",
 ]
 
 OUTPUT_COLUMNS = [
@@ -280,6 +282,8 @@ def _result_values(p: Professor) -> dict:
         "Suggested Email": p.email_suggestion or None,
         "Profile Status": p.profile_status or None,
         "LLM Status": p.llm_status or None,
+        "Funding Score": round(p.funding_score, 3) if p.funding_note else None,
+        "Funding Route": p.funding_note or None,
     }
 
 
@@ -296,6 +300,7 @@ def _output_row(idx: int, p: Professor) -> list:
         res["Email Status"], res["Email Confidence"], res["Email Notes"],
         res["Suggested Email"], res["Profile Status"],
         p.llm_status, "", "", "", "",
+        res["Funding Score"], res["Funding Route"],
     ]
 
 
@@ -404,6 +409,7 @@ def load_for_sending(path: str | Path, sheet: str | None = None,
                 "subject": get("Email Subject") or "",
                 "body": str(body),
                 "probability": prob,
+                "funding": _as_float(get("Funding Score")),
                 "send_status": str(get("Send Status") or "").strip(),
                 "sent_at": str(get("Sent At") or "").strip(),
                 "message_id": str(get("Message ID") or "").strip(),
@@ -414,6 +420,13 @@ def load_for_sending(path: str | Path, sheet: str | None = None,
             })
     _apply_pending(path, rows)
     return rows
+
+
+def _as_float(value) -> float:
+    try:
+        return float(str(value).strip().rstrip("%") or 0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _apply_pending(path: Path, rows: list[dict]) -> None:

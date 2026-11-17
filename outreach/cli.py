@@ -227,6 +227,7 @@ def cmd_run(args) -> int:
     else:
         selected, rejected = filter_candidates(
             professors, profile, min_score=min_score, max_count=settings.max_professors,
+            funding_weight=settings.funding_weight,
         )
     print(f" {len(selected)} selected / {len(rejected)} filtered out "
           f"(threshold {min_score}, cap {settings.max_professors})")
@@ -237,8 +238,11 @@ def cmd_run(args) -> int:
     )
     for reason, n in reasons.most_common():
         print(_safe(f"   {n:>5} x {reason}"))
+    if settings.funding_weight:
+        print(f" Ranking = topic fit + funding x{settings.funding_weight:g} (FUNDING_WEIGHT)")
     for p in selected[:12]:
-        print(_safe(f"   {p.local_score:>6.3f}  {p.name[:30]:<30} {p.research_area[:36]}"))
+        print(_safe(f"   {p.local_score:>6.3f}  fit {p.fit_score:.2f} fund {p.funding_score:.2f}  "
+                    f"{p.name[:26]:<26} {p.funding_note[:34]}"))
     if len(selected) > 12:
         print(f"   ... and {len(selected) - 12} more")
     if not selected:
@@ -1128,8 +1132,10 @@ def cmd_legacy(args) -> int:
                                "quantum field theory; astrophysics")
         disc = Discoverer(mailto=settings.openalex_mailto, api_key=settings.openalex_api_key,
                           cache_path=settings.output_dir / "discover_cache.json")
+        fw = args.funding_weight if args.funding_weight is not None else settings.funding_weight
         legends = L.search_legends(disc, topics, resolve_countries(args.countries or ""),
-                                   args.min_h, args.per_topic, datetime.now().year - 2)
+                                   args.min_h, args.per_topic, datetime.now().year - 2,
+                                   funding_weight=fw, companies=args.companies)
         named = split_queries(args.include or "")
         if named:
             legends += L.lookup_named(disc, named)
@@ -1168,7 +1174,7 @@ def cmd_legacy(args) -> int:
             if lg.email and lg.email.lower() in mailed:
                 lg.email_notes = f"skipped {lg.email}: already contacted or already in legacy.xlsx"
                 lg.email, lg.email_status = "", "duplicate"
-        rows = L.merge(rows, legends)
+        rows = L.merge(rows, legends, funding_weight=fw)
         L.save(path, rows)
         ok = sum(1 for r in rows if r.get("Email"))
         print(f" {len(rows)} in {path.name}; {ok} with a verified address.")
@@ -1766,6 +1772,11 @@ def cmd_discover(args) -> int:
             mailto=settings.openalex_mailto, api_key=settings.openalex_api_key,
             cache_path=settings.output_dir / "discover_cache.json",
             top_universities=top_n, prestige_weight=prestige,
+            funding_weight=(args.funding_weight if args.funding_weight is not None
+                            else settings.funding_weight),
+            inst_types=(["education", "facility", "company"]
+                        if (args.include_companies or settings.discover_include_companies)
+                        else None),
             also_universities=split_queries(args.also_universities
                                             or settings.discover_also_universities),
             on_top_unis=on_top_unis,
@@ -2160,6 +2171,12 @@ def build_parser() -> argparse.ArgumentParser:
                     help="With --find: keep only candidates whose topics/recent work match REGEX "
                          "(people named with --include are always kept)")
     lg.add_argument("--per-topic", type=int, default=8, help="Candidates per topic (default 8)")
+    lg.add_argument("--funding-weight", type=float,
+                    help="With --find: rank by h-index plus host funding likelihood "
+                         "(0 = h-index only; default FUNDING_WEIGHT)")
+    lg.add_argument("--companies", action="store_true",
+                    help="With --find: only researchers at company labs "
+                         "(Google DeepMind, Microsoft Research, NVIDIA...); pair with --any-field")
     lg.add_argument("--workers", type=int, default=4, help="Parallel email lookups")
     lg.add_argument("--draft", action="store_true", help="Write a letter for each with an address")
     lg.add_argument("--summer", default="2027", help="Which summer (default 2027)")
@@ -2267,6 +2284,12 @@ def build_parser() -> argparse.ArgumentParser:
     sd.add_argument("--also-universities", metavar="NAMES",
                     help="';'-separated universities to include too, e.g. "
                          "\"TU Berlin; EPFL\" (default DISCOVER_ALSO_UNIVERSITIES)")
+    sd.add_argument("--funding-weight", type=float,
+                    help="How much host funding likelihood counts vs topic fit "
+                         "(0 = off, 1 = equal, 2 = double; default FUNDING_WEIGHT)")
+    sd.add_argument("--include-companies", action="store_true",
+                    help="Also search company/industry research labs "
+                         "(default DISCOVER_INCLUDE_COMPANIES)")
     sd.add_argument("--list-universities", action="store_true",
                     help="Just print the top universities for --countries and exit")
     sd.add_argument("--output",

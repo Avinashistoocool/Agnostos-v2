@@ -496,6 +496,8 @@ class Discoverer:
 
 def to_professor(cand: Candidate, homepage: str = "") -> Professor:
     """Candidate -> the record the rest of the pipeline already understands."""
+    from .funding import funding_score
+    fund, route = funding_score(cand.institution, cand.country)
     return Professor(
         name=cand.name,
         email="",                       # verify --repair fills this in
@@ -511,4 +513,8 @@ def to_professor(cand: Candidate, homepage: str = "") -> Professor:
         openalex_id=cand.author_id,
         openalex_concepts=cand.topics[:8],
         prior_probability="",
+        funding_status=f"{int(fund * 100)}% likely: {route}",
+        application_route=route,
+        funding_score=fund,
+        funding_note=route,
     )

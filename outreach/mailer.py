@@ -344,7 +344,10 @@ class Mailer:
             pending = kept
         if top:
             # Mail the N strongest matches, not the first N in sheet order.
-            pending = sorted(pending, key=lambda r: -r.get("probability", 0))[:top]
+            # Funding likelihood (0..1) adds up to FUNDING_WEIGHT * 20 points.
+            fw = getattr(self.s, "funding_weight", 0.0) or 0.0
+            pending = sorted(pending, key=lambda r: -(r.get("probability", 0)
+                                                      + fw * 20.0 * r.get("funding", 0.0)))[:top]
         total = len(pending)
         queue = list(enumerate(pending, 1))
         consecutive_failures = 0

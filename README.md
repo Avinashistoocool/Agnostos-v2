@@ -371,6 +371,26 @@ python -m outreach.cli send --live --top 10 --min-probability 60
 - `--limit N` caps how many emails are actually sent in this run, applied after the `--top` ordering.
 - `DAILY_SEND_CAP` in `.env` is the default for `--limit`. Cold sends (`send`, `resend`, `legacy`) are also limited by `COLD_DAILY_HARD_CAP` (default 40, configurable from 1 to 90). Invalid ceilings fail explicitly. Raising it does not bypass domain limits or increase the desktop UI's own limits.
 
+**Funding factor.** Every host also gets a 0-1 funding likelihood plus the most likely funded route, from `outreach/funding.py`. The inputs are:
+
+- known paid schemes, such as company research labs (Google/DeepMind, Microsoft Research, NVIDIA, IBM, Ai2...) and funded facilities or programmes (CERN, DESY, PSI, Max Planck, Summer@EPFL, ETH SSRF, OIST, KAUST VSRP, Caltech SURF...);
+- country routes for Indian undergraduates (Charpak for France, DAAD for Germany, TEEP for Taiwan...). The UK scores low;
+- any "no funding" reply, which sets the score to 0.
+
+`FUNDING_WEIGHT` (default 1, so topic fit and funding count equally; 0 turns it off; 2 makes funding count double) controls:
+
+- the order of `run` rankings (the relevance floor `--min-score` still applies to topic fit alone);
+- `discover` batch ranking (`--funding-weight`);
+- `legacy --find` ordering (h-index plus funding);
+- `send --top` ordering (probability + 20 × weight × funding).
+
+The workbooks gain `Funding Score` and `Funding Route` columns. Drafts may name the programme (for example "CERN Summer Student") but still never mention money.
+
+Company and individual-lab research:
+
+- `discover --include-companies` (or `DISCOVER_INCLUDE_COMPANIES=1`, the default) also searches researchers at company labs.
+- `legacy --find --companies --any-field --topics "machine learning; quantum computing"` finds senior researchers at company labs only.
+
 **Who is never cold-mailed.** `send`, `resend` and `legacy` skip, with a reason in the log: any address that bounced on either account (`Reply Status` starting with "bounced", bounce records in `send_log.csv`, `output/FAILURES.json`; reason `skipped: bounced before`); people and domains in `output/no_cold_email.json`; student, alumni and shared mailboxes (`@postgrad.`, `@studenti.`, `@g.harvard.edu`, `name.20@ucl.ac.uk`, `lehre-`, `pec`); addresses without the first initial plus surname; `suspect` addresses (unless `--allow-unverified`); drafts flagged `REJECTED DRAFT`; and any institution domain that already had `MAX_PER_DOMAIN_WEEK` (3) cold emails in the last 7 days.
 
 Rows already marked `sent` are skipped automatically, so an interrupted run is safe to resume. Dry runs never block a later real send.
