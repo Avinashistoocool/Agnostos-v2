@@ -34,6 +34,24 @@ Research relevance matters more than prestige. Check that the person is active,
 works in the field and can plausibly supervise the proposed project. Institution
 rankings and generated probability scores are not reliable admissions forecasts.
 
+**Funding factor.** Each host gets a 0-1 likelihood of a paid route, such as
+company research labs, funded facilities (CERN, DESY, PSI, Max Planck), named
+summer programmes or country schemes. A reply saying there is no funding sets the
+score to 0. `FUNDING_WEIGHT` (Settings, or **Funding weight** on a job) sets how
+much this counts against topic fit: 0 turns it off, 1 counts it equally and 2
+counts it double. Off-topic hosts are still rejected. The workbooks show
+**Funding Score** and **Funding Route**. It is a ranking signal, not a promise of
+funding.
+
+**Companies and labs.** **Discover professors > Include companies** also searches
+industry research labs. **Senior researchers (legacy)** finds eminent,
+still-active researchers and drafts a respectful letter, sent from your second
+mailbox after you approve it row by row. Options:
+- **Any field**: robotics or ML instead of physics only.
+- **Match**: a regex on topics.
+- **Companies**: company labs only.
+- **Funding weight**: rank by h-index plus funding.
+
 ## 3. Draft, inspect, then approve
 
 Use **Match & draft**, then inspect the complete subject and body for each

@@ -1,6 +1,6 @@
 [package]
 name = "agnostos"
-version = "2.2.0"
+version = "2.3.0"
 description = "Agnostos: research outreach, done honestly"
 authors = ["Avinash Chandra Gupta"]
 license = "MIT"

@@ -1,11 +1,11 @@
-# Agnostos for Windows - 2.2.0 beta
+# Agnostos for Windows - 2.3.0 beta
 
 A desktop application for finding research contacts, reviewing email drafts,
 sending approved outreach and tracking conversations.
 
 ## What is in this ZIP?
 
-- `Agnostos_2.2.0_x64-setup.exe`: Windows installer, including the Python engine.
+- `Agnostos_2.3.0_x64-setup.exe`: Windows installer, including the Python engine.
 - `README.md`: installation, privacy and limitations.
 - `USAGE.md`: workflow and sending policies.
 - `LICENSE`: project license.
@@ -17,7 +17,7 @@ backup of the author's workspace.
 ## Install
 
 1. Extract the ZIP to a normal folder.
-2. Run `Agnostos_2.2.0_x64-setup.exe`.
+2. Run `Agnostos_2.3.0_x64-setup.exe`.
 3. Open **Agnostos** from the Windows Start menu.
 
 Windows 10/11 x64 is required. Python, Node.js and Rust do not need to be
