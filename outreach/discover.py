@@ -247,12 +247,29 @@ class Discoverer:
             "Accept": "application/json",
         })
         try:
-            with tls_urlopen(req, timeout=self.timeout) as resp:
-                return json.loads(resp.read().decode("utf-8"))
+            for attempt in range(3):
+                try:
+                    with tls_urlopen(req, timeout=self.timeout) as resp:
+                        return json.loads(resp.read().decode("utf-8"))
+                except urllib.error.HTTPError as exc:
+                    if exc.code not in (429, 503) or attempt == 2:
+                        raise
+                    # OpenAlex sheds anonymous search load with 503 + Retry-After.
+                    try:
+                        delay = min(int(exc.headers.get("Retry-After") or 20), 60)
+                    except ValueError:
+                        delay = 20
+                    time.sleep(delay)
         except urllib.error.HTTPError as exc:
-            self.last_error = (
-                "OpenAlex rate limit hit; set OPENALEX_API_KEY in .env for a "
-                "free higher quota." if exc.code == 429 else f"HTTP {exc.code}")
+            if exc.code == 429:
+                self.last_error = ("OpenAlex rate limit hit; set OPENALEX_API_KEY in .env for a "
+                                   "free higher quota.")
+            elif exc.code == 503 and not self.api_key:
+                self.last_error = ("OpenAlex search is unavailable without an API key (HTTP 503). "
+                                   "Get a free key at https://openalex.org/rest-api and set "
+                                   "OPENALEX_API_KEY in Settings / .env.")
+            else:
+                self.last_error = f"HTTP {exc.code}"
             return None
         except Exception as exc:
             self.last_error = f"{type(exc).__name__}: {exc}"

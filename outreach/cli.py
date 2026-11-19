@@ -1783,6 +1783,10 @@ def cmd_discover(args) -> int:
             on_batch_start=on_start, on_page=on_page):
         if res.error:
             print(f" ! {res.error}")
+            if res.works == 0 and "OPENALEX_API_KEY" in res.error:
+                # Every batch would fail the same way; stop instead of printing four empty batches.
+                print(" Stopping discovery: fix the OpenAlex key above and run it again.")
+                return 1
         why = ("topic exhausted" if res.exhausted
                else "page cap reached" if res.found < res.quota else "quota met")
         print(f" Batch {res.index}: {res.found}/{res.quota} new professors "
