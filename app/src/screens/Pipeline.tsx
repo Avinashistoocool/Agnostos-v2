@@ -11,15 +11,39 @@ import { cn, useAsync } from "../lib/util";
 
 export function defaultsFor(spec: CommandSpec): Record<string, unknown> {
   const o: Record<string, unknown> = {};
-  for (const f of spec.fields) o[f.name] = f.default ?? (f.type === "bool" ? false : f.type === "choice" ? f.choices?.[0] ?? "" : f.type === "str" ? "" : undefined);
+  // Choices without an explicit default stay unset so the workspace's .env wins (e.g. LLM_PROVIDER).
+  for (const f of spec.fields) o[f.name] = f.default ?? (f.type === "bool" ? false : f.type === "choice" ? "" : f.type === "str" ? "" : undefined);
   return o;
 }
+
+/** Zero-config steps: each starts immediately with the workspace's saved settings. */
+const QUICK: { cmd: string; title: string; hint: string; opts: Record<string, unknown> }[] = [
+  { cmd: "discover", title: "1 · Find professors", hint: "Topics and countries from Settings; addresses looked up", opts: { verify_emails: true } },
+  { cmd: "run", title: "2 · Draft emails", hint: "Scores and drafts everyone found, using your model key", opts: { mode: "list" } },
+  { cmd: "send", title: "3 · Preview sending", hint: "Dry run of the next batch. Go live from the full dialog", opts: {} },
+];
 
 export function Pipeline() {
   const { engine } = useSession();
   const { data, loading, error } = useAsync(() => engine.call("commands.list"), [engine]);
   const [params] = useSearchParams();
   const [open, setOpen] = useState<CommandSpec | null>(null);
+  const { jobs, upsert } = useJobs();
+  const toast = useToast();
+  const nav = useNavigate();
+  const blocking = jobs.find(isActive);
+
+  const quick = async (q: (typeof QUICK)[number]) => {
+    try {
+      const r = await engine.call("jobs.start", { command: q.cmd, options: q.opts });
+      upsert(r.job);
+      toast.success(`${q.title.replace(/^\d · /, "")} started`);
+      nav(`/jobs/${r.job.id}`);
+    } catch (e) {
+      const err = toEngineError(e);
+      toast.error("Couldn't start job", err.message);
+    }
+  };
 
   const groups = useMemo(() => {
     const m = new Map<string, CommandSpec[]>();
@@ -35,6 +59,30 @@ export function Pipeline() {
   return (
     <>
       <PageHeader title="Pipeline" subtitle="Each step is a job you can watch. Sending is always a dry run unless you explicitly go live." />
+      <Card className="mb-8 p-5" data-testid="quick-start">
+        <div className="mb-3 text-xs font-medium uppercase tracking-wider text-slate">Quick start: one click each, using your saved settings</div>
+        {blocking && (
+          <div className="mb-3 rounded-lg border border-amber/30 bg-amber-soft px-3 py-2 text-xs text-amber">
+            "{blocking.command}" is running. The next step unlocks when it finishes.
+          </div>
+        )}
+        <div className="grid gap-3 md:grid-cols-3">
+          {QUICK.map((q) => (
+            <button
+              key={q.cmd}
+              disabled={!!blocking}
+              onClick={() => void quick(q)}
+              data-testid={`quick-${q.cmd}`}
+              className="card focus-ring flex flex-col p-4 text-left transition-all hover:border-line-strong disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <span className="flex items-center gap-2 text-sm font-medium text-cream">
+                <Play className="h-3.5 w-3.5" /> {q.title}
+              </span>
+              <span className="mt-1 text-xs text-slate">{q.hint}</span>
+            </button>
+          ))}
+        </div>
+      </Card>
       {loading ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 6 }, (_, i) => (
@@ -226,6 +274,7 @@ function FieldInput({ f, value, onChange }: { f: CommandField; value: unknown; o
     return (
       <Field label={f.label} hint={f.help} htmlFor={id} required={req}>
         <Select id={id} value={String(value ?? "")} onChange={(e) => onChange(e.target.value)}>
+          {!f.default && <option value="">Default (from Settings)</option>}
           {(f.choices ?? []).map((c) => (
             <option key={c} value={c}>
               {c}
