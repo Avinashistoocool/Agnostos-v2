@@ -1,6 +1,7 @@
 # PyInstaller spec for the headless sidecar engine (built by build-engine.ps1).
 # -*- mode: python ; coding: utf-8 -*-
 import os
+import sys
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
@@ -57,5 +58,5 @@ exe = EXE(
     upx=False,
     runtime_tmpdir=None,
     console=True,
-    icon=os.path.join(ROOT, "docs", "assets", "agnostos.ico"),
+    icon=(os.path.join(ROOT, "docs", "assets", "agnostos.ico") if sys.platform == "win32" else None),
 )

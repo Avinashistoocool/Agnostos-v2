@@ -20,6 +20,8 @@ def data_dir() -> Path:
     override = os.getenv("AGNOSTOS_DATA_DIR")
     if override:
         path = Path(override)
+    elif sys.platform == "darwin":
+        path = Path.home() / "Library" / "Application Support" / "Agnostos"
     else:
         base = os.getenv("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
         path = Path(base) / "Agnostos"
@@ -89,9 +91,32 @@ if os.name == "nt":
             return ctypes.string_at(blob_out.pbData, blob_out.cbData)
         finally:
             _kernel32.LocalFree(blob_out.pbData)
-else:  # pragma: no cover - the desktop app is Windows-only
+elif sys.platform == "darwin":
+    import base64
+    import subprocess
+
+    _KC_SERVICE = "Agnostos"
+    _KC_PREFIX = b"keychain:"
+
     def _dpapi(data: bytes, protect: bool) -> bytes:
-        raise OSError("DPAPI requires Windows")
+        # macOS: the secret itself lives in the login Keychain; the file holds only a handle.
+        if protect:
+            account = secrets.token_hex(16)
+            subprocess.run(["security", "add-generic-password", "-U", "-s", _KC_SERVICE,
+                            "-a", account, "-w", base64.b64encode(data).decode("ascii")],
+                           check=True, capture_output=True)
+            return _KC_PREFIX + account.encode("ascii")
+        if not data.startswith(_KC_PREFIX):
+            raise OSError("Not a Keychain handle")
+        account = data[len(_KC_PREFIX):].decode("ascii")
+        out = subprocess.run(["security", "find-generic-password", "-s", _KC_SERVICE,
+                              "-a", account, "-w"], capture_output=True, text=True)
+        if out.returncode != 0:
+            raise OSError("Keychain item not found")
+        return base64.b64decode(out.stdout.strip())
+else:  # pragma: no cover
+    def _dpapi(data: bytes, protect: bool) -> bytes:
+        raise OSError("Secure token storage requires Windows or macOS")
 
 
 def protect(data: bytes) -> bytes:
