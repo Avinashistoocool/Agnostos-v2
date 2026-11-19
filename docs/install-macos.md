@@ -4,6 +4,8 @@ See also: [FAQ](faq.md) · [Diagnostics](diagnostics.md)
 
 This guide covers setup and daily use on macOS 12 or later, on Apple Silicon or Intel. It runs Agnostos as a local command-line tool.
 
+> **Prefer the desktop app?** Build the `.dmg` once with `./build-mac.sh`; see [packaging/macos/README.md](../packaging/macos/README.md). The app offers the same commands, including the funding factor, company search and senior-researcher (legacy) letters.
+
 ---
 
 ## 1. Install the prerequisites

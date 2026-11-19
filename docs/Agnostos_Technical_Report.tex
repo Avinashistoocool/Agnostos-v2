@@ -327,6 +327,22 @@ adds $5w$, sliding towards zero for the last one. Universities named with
 \code{--also-universities} are resolved by OpenAlex institution search and inserted at position
 $\min(R, 10)$ of the ranking.
 
+\paragraph{Funding factor.} Every host gets a funding likelihood $f \in [0,1]$ from
+\code{outreach/funding.py}, using the first applicable rule:
+\begin{enumerate}
+  \item A reply stating that there is no funding gives $f = 0$.
+  \item A curated table of known paid schemes sets $f$ to the highest-scoring match on the
+        institution name. Examples: Google/DeepMind $0.95$, Microsoft Research $0.9$, CERN
+        $0.8$, DESY and Max Planck $0.75$, ETH and EPFL summer programmes $0.75$.
+  \item A country route for Indian undergraduates raises $f$ if it is higher (Charpak/FR $0.55$,
+        DAAD/DE $0.45$, US $0.25$, GB $0.1$).
+  \item Otherwise $f$ is $0.6$ for an industry lab, $0.35$ for a facility or institute and $0.15$
+        for a university group.
+\end{enumerate}
+The matching route is kept as a note. With weight $w_f$ (\code{FUNDING\_WEIGHT},
+\code{--funding-weight}), discovery uses $s'' = s' + 5\,w_f f$. With
+\code{--include-companies}, OpenAlex institution type \code{company} is searched as well.
+
 \subsection{Batches}\label{sec:batches}
 The total count $C$ is split over $K$ batches by integer division,
 \[
@@ -418,8 +434,14 @@ one phrase plus one word gives $0.73$.
 \[
   \text{score} = 0.45\,\min(2.5\cos,\, 1) + 0.55\,\tau ,
 \]
-rounded to four decimals, and $0$ when the professor text is shorter than 12 characters.
-Professors are sorted by score and then filtered in order:
+rounded to four decimals, and $0$ when the professor text is shorter than 12 characters. This
+is the \emph{fit} score. With $w_f > 0$ the ranking key becomes
+\[
+  \text{local} = \frac{\text{fit} + w_f f}{1 + w_f},
+\]
+so $w_f = 1$ weighs topic fit and funding equally. The relevance floor below always applies to
+fit alone, so funding cannot rescue an off-topic host.
+Professors are sorted by this key and then filtered in order:
 \begin{enumerate}
   \item no email address $\to$ \code{skipped: no email};
   \item score below \code{MIN\_LOCAL\_SCORE} (default $0.25$) $\to$ skipped;
@@ -679,9 +701,14 @@ Institution and OpenAlex ID cells are filled in from the record.
 \subsection{Selection}
 The mailer considers rows with a draft and an address whose \code{Send Status} is not
 \emph{sent} (or \emph{review-sent} in review mode), and whose probability is at least
-\code{--min-probability}. With \code{--top N} the rows are sorted by probability and the best $N$
+\code{--min-probability}. With \code{--top N} the rows are sorted by
+$p + 20\,w_f f$ ($p$ the probability in percent) and the best $N$
 are kept; \code{--limit} (default \code{DAILY\_SEND\_CAP} $= 25$) then caps real sends in this
-run. With \code{FOCUS} on, off-field rows are excluded as in \code{run}.
+run, and cold first emails are also clamped at \code{COLD\_DAILY\_HARD\_CAP} (1--90). The send guard
+skips bounced addresses, \code{no\_cold\_email.json} entries, student or shared mailboxes,
+name/address mismatches and any domain that already had \code{MAX\_PER\_DOMAIN\_WEEK} cold emails
+in seven days. Unverified recipients go to \code{verification\_queue.json} instead of blocking
+the run. With \code{FOCUS} on, off-field rows are excluded as in \code{run}.
 
 \subsection{Recipient-local send windows}
 A window \code{H1-H2} (minutes $[a, b)$, with $b > a$) is evaluated in the recipient's time
@@ -793,9 +820,12 @@ original send columns are never changed.
 \code{legacy} writes a different kind of email: a short letter from an aspiring scientist to a
 high-impact researcher. Let $A$ be the current year minus two. For each topic it takes the 100
 most-cited works with more than 200 citations published since $A - 10$, collects the first 12
-authors of each, hydrates up to 200 of them, and walks them in descending h-index order, keeping
+authors of each, hydrates up to 200 of them, and walks them in descending order of
+$h + 40\,w_f f$, keeping
 authors with $h \ge 60$ (\code{--min-h}) and at least two works since $A$ (still active), up to
-eight per topic. People named with \code{--include} are added from an author search. A
+eight per topic. With \code{--companies} the works are restricted to company-affiliated authors
+(Google DeepMind, Microsoft Research, NVIDIA, \ldots), and \code{legacy.xlsx} records
+\emph{Funding Score} and \emph{Funding Route} for every row. People named with \code{--include} are added from an author search. A
 candidate is kept only if its topics and recent titles contain at least two distinct physics
 terms and no off-field marker. Recent work is taken from papers with at most 12 authors, so a
 letter never credits someone with a 3\,000-author paper. Addresses come from the same finder as

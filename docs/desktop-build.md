@@ -63,7 +63,16 @@ Outputs, under `app\src-tauri\target\release\bundle\`:
 
 Each bundle is about 11 MB plus the size of the engine. The app version comes from
 `app/src-tauri/tauri.conf.json` (`version`) and `Cargo.toml`. Keep both in sync with
-`outreach/__init__.py` (`__version__`, currently 2.2.0) when you release.
+`outreach/__init__.py` (`__version__`, currently 2.3.0) when you release.
+
+## Publishing a download
+
+1. Package the installer with docs: `Agnostos-<ver>-Windows-Setup.zip` containing the setup `.exe`, `packaging/windows/README.md`, `USAGE.md` and `LICENSE`.
+2. Tag the release (`git tag v<ver>`; push the tag) and create a GitHub Release with the ZIP attached. The README's **Download** link points at `releases/latest`.
+
+## macOS build
+
+Run `./build-mac.sh` on a Mac with the Xcode Command Line Tools, Python 3.12+, Node 20+ and Rust. It freezes the engine for the host target triple (`agnostos-engine-aarch64-apple-darwin` or `-x86_64-apple-darwin`), copies it into `app/src-tauri/binaries/`, and runs `tauri build`. `tauri.macos.conf.json` switches the bundle targets to `app` and `dmg`. The output is `bundle/dmg/Agnostos_<ver>_<arch>.dmg`. It is unsigned: the first time, right-click the app and choose **Open**. On macOS the engine keeps data in `~/Library/Application Support/Agnostos` and stores tokens in the login Keychain (service `Agnostos`). See `packaging/macos/README.md`.
 
 ## Code signing
 

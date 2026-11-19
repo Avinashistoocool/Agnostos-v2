@@ -22,15 +22,19 @@ FACTS = Path(__file__).resolve().parents[1] / "output" / "confirmed_facts.md"
 
 def setUpModule():
     # The repo's facts file holds the verified numbers these drafts quote; the
-    # built-in fallback is deliberately empty.
+    # built-in fallback is deliberately empty. It is personal and not committed,
+    # so these tests only run on the author's machine.
     global _facts_patch
+    if not FACTS.is_file():
+        raise unittest.SkipTest("output/confirmed_facts.md not present")
     from unittest.mock import patch
     _facts_patch = patch.object(settings, "confirmed_facts_file", str(FACTS))
     _facts_patch.start()
 
 
 def tearDownModule():
-    _facts_patch.stop()
+    if "_facts_patch" in globals():
+        _facts_patch.stop()
 
 
 GOOD_SUBJECT = "Belle II GNN background sim / 84.84% JetClass tagger (IIT Delhi)"

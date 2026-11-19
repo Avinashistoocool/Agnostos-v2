@@ -7,7 +7,23 @@ changes, MINOR for new commands or options, PATCH for fixes.
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-11-19
+
 ### Added
+- **Funding factor** (`outreach/funding.py`) scores each host 0-1 for how likely it is to fund a visiting student. Inputs are known paid schemes (company research labs and funded facilities and programmes such as CERN, DESY, PSI, Max Planck, EPFL, ETH, OIST and KAUST), country routes (Charpak, DAAD, TEEP and others), and "no funding" replies, which set the score to 0. `FUNDING_WEIGHT` blends the score into `run`, `discover`, `legacy --find` and `send --top` ordering. The relevance floor still applies to topic fit only. Workbooks gain **Funding Score** and **Funding Route** columns. Drafts may name the programme but never mention money.
+- Company and individual-lab search: `discover --include-companies` (`DISCOVER_INCLUDE_COMPANIES`) and `legacy --companies`.
+- The desktop app exposes the funding weight, company search, and the legacy `--any-field` and `--match` options.
+- macOS build: `build-mac.sh` produces a `.app` and `.dmg` (`tauri.macos.conf.json`). The engine stores sign-in tokens in the macOS Keychain and data in `~/Library/Application Support/Agnostos`.
+- `COLD_DAILY_HARD_CAP` is configurable (1-90); `MAX_PER_DOMAIN_WEEK` is documented for large institutions.
+- Deferred verification queue: unverified recipients are skipped at send time and checked later with `verify --deferred`.
+
+### Changed
+- Windows installer and ZIP are now version 2.3.0. The README has a Download section that links to the latest release.
+
+### Removed
+- Personal files `output/no_cold_email.json` and `output/confirmed_facts.md` are no longer tracked. Tests that need them skip when the files are absent.
+
+### Added (desktop and privacy)
 - Native PySide6 Windows application with guided controls for all v2 CLI
   commands, local settings, first-email and reply-draft review, job logs and
   progress. The existing CLI remains the internal engine and can still run

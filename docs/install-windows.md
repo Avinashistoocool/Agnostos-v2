@@ -4,6 +4,8 @@ See also: [FAQ](faq.md) · [Diagnostics](diagnostics.md)
 
 This guide covers setup and daily use on Windows 10 or 11. It runs Agnostos as a local command-line tool.
 
+> **Just want the app?** Download `Agnostos-<version>-Windows-Setup.zip` from [the latest release](https://github.com/Avinashistoocool/Agnostos-v2/releases/latest), extract it, and run the setup `.exe`. You don't need Python, Node or Rust.
+
 ---
 
 ## 1. Install the prerequisites

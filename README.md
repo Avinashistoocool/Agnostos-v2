@@ -26,6 +26,12 @@ Point it at your CV and a spreadsheet of professors. It reads your resume, ranks
 
 **Documentation:** [avinashistoocool.github.io/Agnostos-v2](https://avinashistoocool.github.io/Agnostos-v2/) · [Technical report (PDF)](docs/Agnostos_Technical_Report.pdf), which explains the architecture and every scoring rule (local matcher, discovery ranking, cost estimate, AI-tell score, address confidence, send windows); LaTeX source in [`docs/Agnostos_Technical_Report.tex`](docs/Agnostos_Technical_Report.tex).
 
+## Download
+
+**[⬇ Download the latest Windows installer](https://github.com/Avinashistoocool/Agnostos-v2/releases/latest)**. Open the release page and download `Agnostos-<version>-Windows-Setup.zip`, extract it, and run the setup `.exe`. The ZIP includes `README.md` and `USAGE.md` with install steps and sending policies ([Windows notes](packaging/windows/README.md), [usage](packaging/windows/USAGE.md)).
+
+**macOS:** the installer has to be built on a Mac. Run `./build-mac.sh` to produce a `.dmg`; see [packaging/macos/README.md](packaging/macos/README.md).
+
 ---
 
 ## Native Windows desktop app (existing v2 workspace)
@@ -262,6 +268,8 @@ Builds a large, ranked list of professors without you naming a single university
 | `--top-universities N` | Only consider people at the region's N best universities, and favour higher-ranked ones (default `DISCOVER_TOP_UNIVERSITIES`, `0` = off) |
 | `--prestige-weight W` | With `--top-universities`: `0` = topic fit only, `1` = balanced (default), `3` = mostly prestige |
 | `--list-universities` | Print the region's top universities and exit |
+| `--funding-weight W` | Blend host funding likelihood into the ranking (`0` = off, `1` = equal to topic fit, default `FUNDING_WEIGHT`) |
+| `--include-companies` | Also search company and industry research labs (default `DISCOVER_INCLUDE_COMPANIES`) |
 
 **Specific universities anywhere (e.g. the Ivy League).** `--also-universities` takes any `;`-separated list and works without `--top-universities`. Use `--countries usa` (or the matching region) so papers from those campuses aren't filtered out. Combine it with a wider `FOCUS_KEYWORDS` when you want more fields than physics:
 
@@ -548,6 +556,12 @@ python -m outreach.cli legacy --send --live               # send approved letter
 
 Live legacy sends use `LEGACY_FOCUS_KEYWORDS` (falls back to `FOCUS_KEYWORDS`) as their focus gate, so approved non-physics letters aren't held back.
 
+**Funding and company labs.** `--find` ranks candidates by h-index plus host funding likelihood (`--funding-weight`, default `FUNDING_WEIGHT`). `legacy.xlsx` gains **Funding Score** and **Funding Route** columns. Rows that name a funded route (for example the CERN Summer Student programme) are sent first. `--companies` restricts the search to company research labs such as Google DeepMind, Microsoft Research and NVIDIA; pair it with `--any-field`:
+
+```bash
+python -m outreach.cli legacy --find --companies --any-field --topics "machine learning; quantum computing"
+```
+
 The letter is different from an internship request. It's a short, specific, humble note: one idea of theirs that shaped your thinking, one real project of yours, and a small ask, either a summer visit through a real route (CERN/DESY summer student programmes, DAAD WISE, Mitacs, Charpak, EPFL/ETH summer programmes, Caltech SURF, or their own group) or a pointer to someone who could help. It never invents how you found their work.
 
 Review `output/legacy.xlsx` and set **Approved = yes** for each letter you want to send. `--approve-all` covers only addresses the finder verified; addresses typed in by hand must be approved row by row. Sends are spaced 2-5 minutes apart, 10 per run (`--limit`).
@@ -688,7 +702,10 @@ Every setting lives in `.env` (see `.env.example`, which is split into a require
 | `ATTACHMENTS` | — | Semicolon-separated; CV, transcript. Attached to replies that say so; cold first emails only with `COLD_ATTACH_CV=true` |
 | `COLD_ATTACH_CV` | `false` | Attach `ATTACHMENTS` to cold first emails (send/resend/legacy) |
 | `CV_URL` | `https://avinashistoocool.github.io/` | CV link quoted in first emails and added to the signature when nothing is attached |
-| `MAX_PER_DOMAIN_WEEK` | `3` | Max cold first emails per institution domain per rolling 7 days (from `send_log.csv`) |
+| `MAX_PER_DOMAIN_WEEK` | `3` | Max cold first emails per institution domain per rolling 7 days (from `send_log.csv`). Raise it (e.g. `40`) to mail many people at one large institution such as CERN or Oxford |
+| `COLD_DAILY_HARD_CAP` | `40` | Code ceiling on cold first emails per day (1-90) |
+| `FUNDING_WEIGHT` | `1.0` | How much host funding likelihood counts against topic fit in ranking (`0` = off, `2` = double) |
+| `DISCOVER_INCLUDE_COMPANIES` | `true` | `discover` also searches company and industry research labs |
 | `NAME_MATCH_STRICT` | `true` | Cold sends need first initial + surname in the address |
 | `NO_COLD_EMAIL_FILE` | `output/no_cold_email.json` | People/domains that never host ad-hoc interns; skipped at send time |
 | `CONFIRMED_FACTS_FILE` | `output/confirmed_facts.md` | Facts and numbers the drafting prompt may quote; other numbers are stripped |
@@ -701,7 +718,7 @@ Every setting lives in `.env` (see `.env.example`, which is split into a require
 | `DISCOVER_PRESTIGE_WEIGHT` | `1.0` | How much university rank counts against topic fit |
 | `VERIFY_WORKERS` | `4` | Parallel email lookups |
 | `SEND_DELAY_MIN/MAX` | `90`/`240` | Seconds between emails |
-| `DAILY_SEND_CAP` | `25` | Stay under provider limits. Cold first emails are clamped at 40/day in code |
+| `DAILY_SEND_CAP` | `25` | Stay under provider limits. Cold first emails are also clamped at `COLD_DAILY_HARD_CAP` |
 | `SEND_LOCAL_WINDOW` | — | Recipient-local hours to send in, e.g. `9-11` |
 | `IMAP_HOST/PORT/USER/PASSWORD` | from SMTP | Mailbox for `check-replies` |
 | `IMAP_FOLDERS` | `INBOX;SPAM;Junk;Junk Email` | Folders to scan for replies |
