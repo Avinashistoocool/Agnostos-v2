@@ -38,6 +38,7 @@ nav:
   - Diagnostics: diagnostics.md
   - Google Calendar: calendar.md
   - Technical report (PDF): Agnostos_Technical_Report.pdf
+  - All projects: https://avinashistoocool.github.io/projects/
 
 markdown_extensions:
   - admonition
