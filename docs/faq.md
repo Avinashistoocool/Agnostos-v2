@@ -78,7 +78,7 @@ No:
 | `--export` | writes `.eml` files to `output/drafts/` | no |
 
 **Is my CV attached?**
-Only if you set `ATTACHMENTS=/path/to/cv.pdf` in `.env`. Separate multiple files with `;`. Follow-up replies are sent without attachments.
+Cold first emails don't attach it by default: they link `CV_URL` (set `COLD_ATTACH_CV=true` to attach `ATTACHMENTS` instead). Follow-up replies attach `ATTACHMENTS` only when the reply says something is attached.
 
 **Why was an address skipped as "invalid"?**
 `verify` found it undeliverable, for example a nonexistent domain or a format the university doesn't use. Run `verify --repair --apply` to find the right one. Use `--allow-unverified` only if you are sure the address is correct.
