@@ -31,3 +31,4 @@ copilot-debug-logs-*
 
 # per-run reports with third-party contact data
 FAILURES.json
+diag_tmp_*.txt

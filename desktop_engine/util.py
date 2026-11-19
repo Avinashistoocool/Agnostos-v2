@@ -102,8 +102,12 @@ elif sys.platform == "darwin":
         # macOS: the secret itself lives in the login Keychain; the file holds only a handle.
         if protect:
             account = secrets.token_hex(16)
+            # `-w` last with no value makes `security` read the password from stdin,
+            # so the secret never appears in the process list.
+            secret = base64.b64encode(data).decode("ascii")
             subprocess.run(["security", "add-generic-password", "-U", "-s", _KC_SERVICE,
-                            "-a", account, "-w", base64.b64encode(data).decode("ascii")],
+                            "-a", account, "-w"],
+                           input=f"{secret}\n{secret}\n", text=True,
                            check=True, capture_output=True)
             return _KC_PREFIX + account.encode("ascii")
         if not data.startswith(_KC_PREFIX):
@@ -133,6 +137,12 @@ KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 _LINE_RE = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=")
 
 
+def bad_env_value(value: str) -> bool:
+    """True for anything that could become a second .env line: CR/LF/NUL, but also
+    U+2028/U+2029/U+0085 and other separators that str.splitlines() honours."""
+    return len(value.splitlines()) > 1 or bool(re.search(r"[\x00-\x08\x0a-\x1f\x7f\x85\u2028\u2029]", value))
+
+
 def read_env(path: Path) -> dict[str, str]:
     path = Path(path)
     if not path.is_file():
@@ -153,10 +163,13 @@ def update_env(path: Path, changes: dict[str, str | None]) -> None:
     for key, value in changes.items():
         if not KEY_RE.fullmatch(key):
             raise EngineError("bad_request", f"Invalid setting name: {key}")
-        if value is not None and (not isinstance(value, str) or re.search(r"[\r\n\x00]", value)):
+        if value is not None and (not isinstance(value, str) or bad_env_value(value)):
             raise EngineError("bad_request", f"Invalid value for {key}")
     try:
-        lines = path.read_text(encoding="utf-8-sig").splitlines() if path.is_file() else []
+        lines = (path.read_text(encoding="utf-8-sig").split("\n") if path.is_file() else [])
+        lines = [l[:-1] if l.endswith("\r") else l for l in lines]
+        if lines and lines[-1] == "":
+            lines.pop()
     except OSError as exc:
         raise EngineError("unavailable", f"Cannot read {path}: {exc}") from exc
     pending = dict(changes)

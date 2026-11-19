@@ -14,7 +14,7 @@ import threading
 
 from desktop_review.storage import Workspace
 from .errors import EngineError
-from .util import (KEY_RE, data_dir, protect, read_env, read_json, unprotect,
+from .util import (KEY_RE, bad_env_value, data_dir, protect, read_env, read_json, unprotect,
                    update_env, write_json)
 
 STEPS = ["resume", "profile", "interests", "targets", "email", "llm", "funding", "limits"]
@@ -348,7 +348,7 @@ class Accounts:
                 raise EngineError("bad_request", f"Setting {key} cannot be changed here")
             if value is None:
                 value = ""
-            if not isinstance(value, str) or len(value) > 4096 or re.search(r"[\r\n\x00]", value):
+            if not isinstance(value, str) or len(value) > 4096 or bad_env_value(value):
                 raise EngineError("bad_request", f"Invalid value for {key}")
             if is_secret(key) and value.startswith(MASK):
                 continue

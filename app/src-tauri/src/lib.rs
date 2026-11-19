@@ -108,7 +108,13 @@ impl Engine {
             .unwrap()
             .fail_all(protocol::unavailable("The engine was restarted"));
 
-        let handle = match std::env::var(DEV_CMD_ENV).ok().filter(|s| !s.trim().is_empty()) {
+        let dev_cmd = if cfg!(debug_assertions) {
+            std::env::var(DEV_CMD_ENV).ok().filter(|s| !s.trim().is_empty())
+        } else {
+            // Release builds always run the bundled sidecar; an env var must not swap the engine.
+            None
+        };
+        let handle = match dev_cmd {
             Some(cmd) => self.spawn_dev(app, &cmd, generation)?,
             None => self.spawn_sidecar(app, generation)?,
         };
@@ -289,12 +295,35 @@ fn default_dev_cwd() -> PathBuf {
 
 #[tauri::command]
 async fn engine_call(
+    app: AppHandle,
     engine: State<'_, Engine>,
     method: String,
     params: Option<Value>,
 ) -> Result<Value, Value> {
+    let params = params.unwrap_or(Value::Null);
+    if method == "jobs.start" && params.get("confirmation").and_then(Value::as_str).is_some() {
+        // Live sends need a native OS confirmation, so a compromised webview can't send mail alone.
+        if !confirm_live(&app, &params).await {
+            return Err(protocol::engine_error("confirmation_required", "Live send cancelled".to_string()));
+        }
+    }
     let engine = engine.inner().clone();
-    engine.call(method, params.unwrap_or(Value::Null)).await
+    engine.call(method, params).await
+}
+
+async fn confirm_live(app: &AppHandle, params: &Value) -> bool {
+    use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+    let command = params.get("command").and_then(Value::as_str).unwrap_or("?").to_string();
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .message(format!("Agnostos is about to start a LIVE \"{command}\" job that sends real email.\n\nContinue?"))
+        .title("Confirm live send")
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCancelCustom("Send for real".into(), "Cancel".into()))
+        .show(move |ok| {
+            let _ = tx.send(ok);
+        });
+    rx.await.unwrap_or(false)
 }
 
 #[tauri::command]

@@ -9,6 +9,7 @@ One-time setup (see README "Google Calendar"):
 """
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -57,6 +58,10 @@ def service(interactive: bool = False):
             .run_local_server(port=0)
     token.parent.mkdir(parents=True, exist_ok=True)
     token.write_text(creds.to_json(), encoding="utf-8")
+    try:
+        os.chmod(token, 0o600)  # owner-only on POSIX; Windows inherits the user-profile ACL
+    except OSError:
+        pass
     return build("calendar", "v3", credentials=creds, cache_discovery=False)
 
 

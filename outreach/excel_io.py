@@ -261,7 +261,7 @@ def update_workbook(path: str | Path, professors: list[Professor],
                 val = values.get(name)
                 if val in (None, ""):
                     continue  # never clobber manually-maintained cells
-                cell = ws.cell(row=p.source_row, column=col, value=val)
+                cell = _put(ws, p.source_row, col, val)
                 cell.alignment = Alignment(wrap_text=True, vertical="top")
     save_workbook(wb, path)
     return path
@@ -285,6 +285,14 @@ def _result_values(p: Professor) -> dict:
         "Funding Score": round(p.funding_score, 3) if p.funding_note else None,
         "Funding Route": p.funding_note or None,
     }
+
+
+def _put(ws, row: int, col: int, val):
+    """Write a cell; text from scraping/LLM/email starting with '=' stays text, never a formula."""
+    cell = ws.cell(row=row, column=col, value=val)
+    if isinstance(val, str) and val.startswith("="):
+        cell.data_type = "s"
+    return cell
 
 
 def _output_row(idx: int, p: Professor) -> list:
@@ -337,7 +345,7 @@ def append_rows(path: str | Path, professors: list[Professor],
         rank += 1
         for name, val in zip(OUTPUT_COLUMNS, _output_row(rank, p)):
             if val not in (None, ""):
-                ws.cell(row=last, column=headers[name.lower()], value=val)
+                _put(ws, last, headers[name.lower()], val)
         p.source_sheet, p.source_row = ws.title, last
     save_workbook(wb, path)
     return path
@@ -359,7 +367,9 @@ def write_new_workbook(path: str | Path, professors: list[Professor],
         cell.alignment = Alignment(vertical="center", wrap_text=True)
 
     for idx, p in enumerate(sorted(professors, key=lambda x: (-x.probability, -x.local_score)), 1):
-        ws.append(_output_row(idx, p))
+        for col, val in enumerate(_output_row(idx, p), 1):
+            if val not in (None, ""):
+                _put(ws, idx + 1, col, val)
         p.source_sheet, p.source_row = sheet_name, idx + 1
 
     widths = {"Custom Email Draft": 80, "Probability Justification": 55,
