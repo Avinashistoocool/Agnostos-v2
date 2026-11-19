@@ -1,0 +1,1245 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Agnostos by Avinash Chandra Gupta: research internship outreach tool that finds matching professors and writes honest, personalised cold emails.">
+      
+      
+        <meta name="author" content="Avinash Chandra Gupta">
+      
+      
+        <link rel="canonical" href="https://avinashistoocool.github.io/Agnostos-v2/diagnostics/">
+      
+      
+        <link rel="prev" href="../faq/">
+      
+      
+        <link rel="next" href="../calendar/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>Diagnostics - Agnostos</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="green" data-md-color-accent="green">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#agnostos-diagnostics" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Agnostos" class="md-header__button md-logo" aria-label="Agnostos" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Agnostos
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Diagnostics
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="green" data-md-color-accent="green"  aria-label="Light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="green" data-md-color-accent="green"  aria-label="Dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Dark mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Avinashistoocool/Agnostos-v2" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Avinashistoocool/Agnostos-v2
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Agnostos" class="md-nav__button md-logo" aria-label="Agnostos" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Agnostos
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Avinashistoocool/Agnostos-v2" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Avinashistoocool/Agnostos-v2
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Setup
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Setup
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../install-windows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Windows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../install-macos/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    macOS
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../install-linux/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Linux
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostics
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-quick-health-check-2-minutes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Quick health check (2 minutes)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-certificates-tls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Certificates / TLS
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-sending-smtp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Sending (SMTP)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-reading-replies-imap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Reading replies (IMAP)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-drafting-llm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Drafting (LLM)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-finding-professors-and-emails" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Finding professors and emails
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-interruptions-sleep-crash-power-cut" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Interruptions (sleep, crash, power cut)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-workbook-problems" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Workbook problems
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-reporting-a-bug" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Reporting a bug
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../calendar/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Google Calendar
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Agnostos_Technical_Report.pdf" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Technical report (PDF)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://avinashistoocool.github.io/projects/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    All projects
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-quick-health-check-2-minutes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Quick health check (2 minutes)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-certificates-tls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Certificates / TLS
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-sending-smtp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Sending (SMTP)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-reading-replies-imap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Reading replies (IMAP)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-drafting-llm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Drafting (LLM)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-finding-professors-and-emails" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Finding professors and emails
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-interruptions-sleep-crash-power-cut" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Interruptions (sleep, crash, power cut)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-workbook-problems" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Workbook problems
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-reporting-a-bug" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Reporting a bug
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="agnostos-diagnostics">Agnostos diagnostics<a class="headerlink" href="#agnostos-diagnostics" title="Permanent link">&para;</a></h1>
+<p>Use this when something isn't working. Start with the quick check, then find your error message in the tables below.</p>
+<blockquote>
+<p><strong>Never paste your <code>.env</code> or passwords</strong> into an issue or chat. Redact API keys and <code>SMTP_PASSWORD</code>/<code>IMAP_PASSWORD</code>.</p>
+</blockquote>
+<hr />
+<h2 id="1-quick-health-check-2-minutes">1. Quick health check (2 minutes)<a class="headerlink" href="#1-quick-health-check-2-minutes" title="Permanent link">&para;</a></h2>
+<p>Run these from the repo folder, with the virtual environment active:</p>
+<div class="highlight"><pre><span></span><code>python<span class="w"> </span>--version<span class="w">                         </span><span class="c1"># must be 3.10+</span>
+python<span class="w"> </span>-m<span class="w"> </span>outreach.cli<span class="w"> </span>tls-check<span class="w">         </span><span class="c1"># certificates + reachability of SMTP, IMAP, LLM, OpenAlex</span>
+python<span class="w"> </span>-m<span class="w"> </span>outreach.cli<span class="w"> </span>profile<span class="w">           </span><span class="c1"># resume parsing</span>
+python<span class="w"> </span>-m<span class="w"> </span>outreach.cli<span class="w"> </span>models<span class="w">            </span><span class="c1"># LLM key works, model list</span>
+python<span class="w"> </span>-m<span class="w"> </span>outreach.cli<span class="w"> </span>stats<span class="w">             </span><span class="c1"># workbook funnel + "why so few were sent"</span>
+python<span class="w"> </span>-m<span class="w"> </span>outreach.cli<span class="w"> </span>send<span class="w"> </span>--dry-run<span class="w"> </span>--preview<span class="w"> </span><span class="m">1</span><span class="w">   </span><span class="c1"># drafts load, nothing is sent</span>
+python<span class="w"> </span>-m<span class="w"> </span>outreach.cli<span class="w"> </span>check-replies<span class="w"> </span>--dry-run<span class="w">      </span><span class="c1"># IMAP login + reply detection</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Healthy output</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tls-check</code></td>
+<td><code>ok</code> on every host, and a trust source of "OS trust store (truststore)" or a certifi path</td>
+</tr>
+<tr>
+<td><code>profile</code></td>
+<td>your name, email, interests and projects</td>
+</tr>
+<tr>
+<td><code>models</code></td>
+<td>a list of model IDs</td>
+</tr>
+<tr>
+<td><code>stats</code></td>
+<td>counts, plus a "Why so few were sent" list if anything is blocked</td>
+</tr>
+<tr>
+<td><code>send --dry-run</code></td>
+<td><code>dry-run</code> lines, then <code>failed=0</code></td>
+</tr>
+<tr>
+<td><code>check-replies --dry-run</code></td>
+<td><code>Folders: INBOX, ...</code>, then a summary</td>
+</tr>
+</tbody>
+</table>
+<p>The first command that fails tells you which section below to read.</p>
+<hr />
+<h2 id="2-certificates-tls">2. Certificates / TLS<a class="headerlink" href="#2-certificates-tls" title="Permanent link">&para;</a></h2>
+<p><strong>Symptoms</strong>
+<div class="highlight"><pre><span></span><code>ssl.SSLCertVerificationError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed:
+unable to get local issuer certificate (_ssl.c:1144)
+</code></pre></div>
+You may also see <code>APIConnectionError: Connection error.</code> from the LLM, or empty results from <code>verify</code>/<code>discover</code>.</p>
+<p><strong>Cause.</strong> Python can't find a CA store. This happens almost always with <strong>python.org Python on macOS</strong>, which ships without certificates. It also happens on Windows with some university chains, and behind antivirus or corporate proxies that inspect HTTPS.</p>
+<p><strong>Fix, in order:</strong>
+1. <code>pip install -U truststore certifi</code>. Agnostos then uses the OS trust store (Keychain, Windows CertStore or <code>/etc/ssl</code>).
+2. macOS python.org build: double-click <code>/Applications/Python 3.x/Install Certificates.command</code>.
+3. Linux: <code>sudo apt install --reinstall ca-certificates</code> (or your distro's equivalent).
+4. Behind a proxy or antivirus that inspects TLS, export its root CA and set:
+   <code>SSL_CERT_FILE=/path/to/root.pem</code> (Windows: <code>$env:SSL_CERT_FILE="C:\path\root.pem"</code>)
+5. Re-run <code>python -m outreach.cli tls-check</code>.</p>
+<p>Never "fix" this by turning verification off.</p>
+<hr />
+<h2 id="3-sending-smtp">3. Sending (SMTP)<a class="headerlink" href="#3-sending-smtp" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Error</th>
+<th>Meaning</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SMTPAuthenticationError</code> (535)</td>
+<td>Login rejected</td>
+<td>Use an <strong>app password</strong> (Gmail/iCloud), not your normal password. Check <code>SMTP_USER</code> is the full address</td>
+</tr>
+<tr>
+<td><code>SMTPSenderRefused</code></td>
+<td>From address not allowed</td>
+<td><code>SMTP_FROM</code> must equal the mailbox in <code>SMTP_USER</code></td>
+</tr>
+<tr>
+<td><code>SMTPServerDisconnected: Connection unexpectedly closed</code> / <code>read operation timed out</code></td>
+<td>The server dropped the session. University relays drop idle sessions after about 2 minutes</td>
+<td>Agnostos reconnects before each email and retries the connection 3 times. If it persists: raise <code>SEND_DELAY_MIN</code>, lower <code>DAILY_SEND_CAP</code>, and wait an hour, because you may be temporarily rate-limited</td>
+</tr>
+<tr>
+<td><code>SMTPConnectError</code> / <code>TimeoutError</code> on connect</td>
+<td>Can't reach host:port</td>
+<td>Check <code>SMTP_HOST</code>/<code>SMTP_PORT</code>/<code>SMTP_SECURITY</code> (465 uses <code>ssl</code>, 587 uses <code>starttls</code>). Some networks and VPS providers block SMTP ports, so try another network</td>
+</tr>
+<tr>
+<td><code>SMTPRecipientsRefused</code></td>
+<td>Bad recipient address</td>
+<td>Run <code>verify --repair --apply</code> on that row</td>
+</tr>
+<tr>
+<td><code>SMTPDataError</code> (550/554)</td>
+<td>Message rejected, often as spam</td>
+<td>Shorten the draft, remove links, send fewer per day</td>
+</tr>
+<tr>
+<td><code>! Stopped: 3 consecutive SMTP failures</code></td>
+<td>Safety stop</td>
+<td>The rest stay unsent and safe. Fix the cause above and re-run</td>
+</tr>
+<tr>
+<td><code>skipped: invalid address</code></td>
+<td><code>verify</code> marked it undeliverable</td>
+<td><code>verify --repair --apply</code>, or <code>--allow-unverified</code> if you're sure</td>
+</tr>
+<tr>
+<td><code>held ... outside local window</code></td>
+<td>It's outside 9-17 for that professor</td>
+<td>Expected. Re-run later or add <code>--wait</code></td>
+</tr>
+<tr>
+<td><code>is open in Excel (or otherwise locked)</code></td>
+<td>Workbook locked</td>
+<td>Close Excel. If a sidecar <code>.pending-status.json</code> exists, it is merged automatically</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Is my account flagged?</strong> Check these signs:
+- Your own sent copies arrive in your inbox fine, but professors say they got nothing: you're probably landing in spam.
+- Many <code>bounced</code> rows in <code>check-replies</code> with "rejected" or "blocked" wording.
+- Login suddenly fails after many sends.</p>
+<p>If you see these, stop for 24-48 hours, then resume at 20-30 per day.</p>
+<p><strong>Test SMTP without emailing anyone:</strong>
+<div class="highlight"><pre><span></span><code>python<span class="w"> </span>-m<span class="w"> </span>outreach.cli<span class="w"> </span>send<span class="w"> </span>--review<span class="w"> </span>--top<span class="w"> </span><span class="m">1</span><span class="w">     </span><span class="c1"># sends one draft to YOU</span>
+</code></pre></div></p>
+<hr />
+<h2 id="4-reading-replies-imap">4. Reading replies (IMAP)<a class="headerlink" href="#4-reading-replies-imap" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Error</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>IMAP failed: ... AUTHENTICATIONFAILED</code></td>
+<td>Set <code>IMAP_USER</code>/<code>IMAP_PASSWORD</code>, which default to the SMTP ones. Gmail needs IMAP enabled in settings and an app password</td>
+</tr>
+<tr>
+<td><code>IMAP failed: ... getaddrinfo failed</code></td>
+<td><code>IMAP_HOST</code> is wrong. It defaults to <code>imap.&lt;smtp domain&gt;</code>, so set it explicitly</td>
+</tr>
+<tr>
+<td>Replies exist but aren't detected</td>
+<td>They may be in a folder that isn't scanned. Set <code>IMAP_FOLDERS=INBOX;Spam;Junk;&lt;folder&gt;</code></td>
+</tr>
+<tr>
+<td><code>replies</code> finds threads but no "student" messages</td>
+<td>Your server doesn't keep a Sent copy. That's fine, because the original email is taken from the workbook</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="5-drafting-llm">5. Drafting (LLM)<a class="headerlink" href="#5-drafting-llm" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Error / symptom</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>~ endpoint rejected structured outputs ... retrying without it</code></td>
+<td>Normal. The endpoint doesn't support that feature and Agnostos adapts</td>
+</tr>
+<tr>
+<td><code>response truncated; raise MAX_OUTPUT_TOKENS</code></td>
+<td>Reasoning models (gpt-5, o-series) use hidden tokens. Agnostos now raises the budget automatically. For other models, set <code>MAX_OUTPUT_TOKENS=3000</code></td>
+</tr>
+<tr>
+<td><code>Three consecutive failures; aborting to avoid wasted spend</code></td>
+<td>Look at the <code>LLM Status</code> column for the real error, then re-run <code>run</code></td>
+</tr>
+<tr>
+<td><code>AuthenticationError</code> / 401</td>
+<td>Wrong or expired API key</td>
+</tr>
+<tr>
+<td><code>NotFoundError</code> / model not found</td>
+<td>Check <code>DRAFT_MODEL</code> against <code>python -m outreach.cli models</code></td>
+</tr>
+<tr>
+<td><code>RateLimitError</code> / 429</td>
+<td>Groq free tier limit. Wait a minute, lower <code>--max-professors</code>, or switch provider</td>
+</tr>
+<tr>
+<td><code>Set DRAFT_MODEL in .env</code></td>
+<td>Add <code>DRAFT_MODEL=...</code></td>
+</tr>
+<tr>
+<td>Drafts sound robotic</td>
+<td>Keep <code>HUMANIZE_REWRITE=true</code> and lower <code>HUMANIZE_THRESHOLD</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="6-finding-professors-and-emails">6. Finding professors and emails<a class="headerlink" href="#6-finding-professors-and-emails" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>OpenAlex rate limit hit</code></td>
+<td>Set <code>OPENALEX_MAILTO=you@...</code> (polite pool), or get a free <code>OPENALEX_API_KEY</code></td>
+</tr>
+<tr>
+<td>Many <code>invalid</code> / <code>no address on this row</code></td>
+<td><code>verify --repair --apply --workers 6</code>. Some professors don't publish an address, and those are left blank on purpose</td>
+</tr>
+<tr>
+<td><code>discover</code> finds too few</td>
+<td>Broaden <code>--query</code> topics, widen <code>--countries</code>, lower <code>--min-h-index</code></td>
+</tr>
+<tr>
+<td><code>verify</code> very slow</td>
+<td>Lower <code>--workers</code> if you get blocked, or raise it if your network is fast</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="7-interruptions-sleep-crash-power-cut">7. Interruptions (sleep, crash, power cut)<a class="headerlink" href="#7-interruptions-sleep-crash-power-cut" title="Permanent link">&para;</a></h2>
+<p>Nothing that was sent is ever lost or re-sent.</p>
+<ol>
+<li>Check whether a send is still running:</li>
+<li>Windows: <code>Get-CimInstance Win32_Process -Filter "Name='python.exe'" | ? CommandLine -match "send --live"</code></li>
+<li>macOS/Linux: <code>pgrep -af "outreach.cli send"</code></li>
+<li>Check what happened: <code>tail -n 40 output/daily_send.log</code> (Windows: <code>Get-Content output\daily_send.log -Tail 40</code>)</li>
+<li>Check the counts: <code>python -m outreach.cli stats</code></li>
+<li>If nothing is running and rows are still unsent, re-run the same <code>send --live ...</code> command. It continues from where it stopped.</li>
+</ol>
+<p>Windows sleep and wake history: <code>Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Microsoft-Windows-Kernel-Power','Microsoft-Windows-Power-Troubleshooter'} -MaxEvents 20</code>
+macOS: <code>pmset -g log | grep -E "Sleep|Wake" | tail -20</code> · Linux: <code>journalctl -b -u systemd-suspend</code></p>
+<hr />
+<h2 id="8-workbook-problems">8. Workbook problems<a class="headerlink" href="#8-workbook-problems" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PermissionError</code> / <code>is open in Excel</code></td>
+<td>Close Excel or LibreOffice</td>
+</tr>
+<tr>
+<td>Columns not recognised</td>
+<td>Headers must include a name column and an email column. See README "header mapping"</td>
+</tr>
+<tr>
+<td>Something got overwritten</td>
+<td>Restore from <code>output/professors.backup-YYYYMMDD-HHMMSS.xlsx</code></td>
+</tr>
+<tr>
+<td>Statuses "missing" after a run</td>
+<td>Look for <code>professors.xlsx.pending-status.json</code>. It is merged on the next run, or run <code>stats</code> (which already counts it)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="9-reporting-a-bug">9. Reporting a bug<a class="headerlink" href="#9-reporting-a-bug" title="Permanent link">&para;</a></h2>
+<p>Include:
+1. Your OS and <code>python --version</code>
+2. The exact command you ran
+3. The full error output, with <strong>emails, keys and passwords redacted</strong>
+4. The output of <code>python -m outreach.cli tls-check</code> and <code>python -m outreach.cli stats</code>
+5. The last 40 lines of <code>output/daily_send.log</code>, if it was a scheduled send</p>
+<p>Open an issue at https://github.com/Avinashistoocool/Agnostos-v2/issues.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      \"&copy; 2026 Avinash Chandra Gupta (Avinash Gupta) &middot; <a href='https://avinashistoocool.github.io/'>avinashistoocool.github.io</a>\"
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+    <a href="https://avinashistoocool.github.io/" target="_blank" rel="noopener" title="Avinash Chandra Gupta" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M351.9 280H161c2.9 64.5 17.2 123.9 37.5 167.4 11.4 24.5 23.7 41.8 35.1 52.4 11.2 10.5 18.9 12.2 22.9 12.2s11.7-1.7 22.9-12.2c11.4-10.6 23.7-28 35.1-52.4 20.3-43.5 34.6-102.9 37.5-167.4zm-191-48h190.9c-2.8-64.5-17.1-123.9-37.4-167.4-11.4-24.4-23.7-41.8-35.1-52.4C268.1 1.7 260.4 0 256.4 0s-11.7 1.7-22.9 12.2c-11.4 10.6-23.7 28-35.1 52.4-20.3 43.5-34.6 102.9-37.5 167.4m-48 0c3.5-85.6 25.6-165.1 57.9-217.3C78.7 47.3 10.9 131.2 1.5 232zM1.5 280c9.4 100.8 77.2 184.7 169.3 217.3-32.3-52.2-54.4-131.7-57.9-217.3zm398.4 0c-3.5 85.6-25.6 165.1-57.9 217.3 92.1-32.7 159.9-116.5 169.3-217.3zm111.4-48C501.9 131.2 434.1 47.3 342 14.7c32.3 52.2 54.4 131.7 57.9 217.3z"/></svg>
+    </a>
+  
+    
+    
+    
+    
+    <a href="https://github.com/Avinashistoocool" target="_blank" rel="noopener" title="Avinash Chandra Gupta on GitHub" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+    
+    
+    
+    
+    <a href="https://www.linkedin.com/in/avinashistoocool" target="_blank" rel="noopener" title="Avinash Chandra Gupta on LinkedIn" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M416 32H31.9C14.3 32 0 46.5 0 64.3v383.4C0 465.5 14.3 480 31.9 480H416c17.6 0 32-14.5 32-32.3V64.3c0-17.8-14.4-32.3-32-32.3M135.4 416H69V202.2h66.5V416zM102.2 96a38.5 38.5 0 1 1 0 77 38.5 38.5 0 1 1 0-77m282.1 320h-66.4V312c0-24.8-.5-56.7-34.5-56.7-34.6 0-39.9 27-39.9 54.9V416h-66.4V202.2h63.7v29.2h.9c8.9-16.8 30.6-34.5 62.9-34.5 67.2 0 79.7 44.3 79.7 101.9z"/></svg>
+    </a>
+  
+    
+    
+    
+    
+    <a href="https://x.com/suprcoolavinash" target="_blank" rel="noopener" title="Avinash Chandra Gupta on X" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M357.2 48h70.6L273.6 224.2 455 464H313L201.7 318.6 74.5 464H3.8l164.9-188.5L-5.2 48h145.6l100.5 132.9zm-24.8 373.8h39.1L119.1 88h-42z"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.top", "content.code.copy", "search.highlight"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+    
+  </body>
+</html>
